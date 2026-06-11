@@ -70,6 +70,54 @@ def authority_card(conn, authority_id: int) -> dict:
     return card
 
 
+# --------------------------------------------------------------- service
+
+@app.get("/health")
+def health():
+    try:
+        db().execute("SELECT 1 FROM build_info LIMIT 1")
+        return {"status": "ok"}
+    except Exception as exc:                       # noqa: BLE001
+        raise HTTPException(503, f"database unavailable: {exc}")
+
+
+@app.get("/version")
+def version():
+    conn = db()
+    info = {r["key"]: r["value"] for r in
+            conn.execute("SELECT key, value FROM build_info")}
+    import json as _json
+    return {"dataset": "Amtsgraph",
+            "built_at": info.get("built_at"),
+            "source_snapshots": _json.loads(info.get("snapshots", "{}"))}
+
+
+@app.get("/stats")
+def stats():
+    conn = db()
+    one = lambda sql: conn.execute(sql).fetchone()[0]          # noqa: E731
+    return {
+        "authorities_active": one("SELECT COUNT(*) FROM authority "
+                                  "WHERE valid_to IS NULL"),
+        "court_chain_links": one("SELECT COUNT(*) FROM court_chain"),
+        "places": one("SELECT COUNT(*) FROM jz_place"),
+        "competences": one("SELECT COUNT(*) FROM competence"),
+        "parent_edges": one("SELECT COUNT(*) FROM authority_edge "
+                            "WHERE relation='parent'"),
+        "caveats": one("SELECT COUNT(*) FROM caveat"),
+    }
+
+
+@app.get("/sources")
+def sources():
+    """Provenance overview: which source contributed how many records."""
+    conn = db()
+    return [{"source": r["source"], "authorities": r["n"]}
+            for r in conn.execute(
+                """SELECT source, COUNT(*) AS n FROM authority
+                   WHERE valid_to IS NULL GROUP BY source ORDER BY n DESC""")]
+
+
 # ---------------------------------------------------------------- places
 
 @app.get("/places")

@@ -80,7 +80,9 @@ def export(out: Path) -> dict[str, int]:
 
 
 CARD = """---
-license: cc-by-nc-sa-4.0
+license: other
+license_name: sntiq-dual-1.0
+license_link: https://github.com/SNTIQ-Team/amtsgraph/blob/main/LICENSE
 language:
   - de
 pretty_name: "Amtsgraph — German public-authority competence graph"
@@ -132,6 +134,24 @@ provenance (source, URL, fetch timestamp).
    `relation='parent'` for department hierarchies, `'supervision'` for
    oversight, `'appeal'` for derived court appeal routes.
 
+## Null semantics
+
+Empty fields are deliberate, not dirty data:
+
+- `legal_form` is only defined for Jobcenter (`gE` = joint federal-municipal
+  institution, `zkT` = municipal provider); for every other kind it is null.
+- For courts, the full visiting address (street + postal code + city) lives
+  in `street` as published by the justice register, and the separate
+  postal-box address in `postal_address`; the `plz`/`city` columns are
+  filled where sources provide them as discrete fields (agencies), null
+  otherwise.
+- `valid_to` is null for active records; a timestamp marks retired ones
+  (kept for traceability — e.g. offices replaced by a more precise
+  department).
+- `matter` on edges is null for non-court relations (parent, supervision).
+- `external_ids` may be empty for organisational units that have no
+  official register identity of their own.
+
 ## Important notes
 
 - General information, **not legal advice**; statutory exceptions to
@@ -140,7 +160,7 @@ provenance (source, URL, fetch timestamp).
   (pilot); other Länder resolve at authority level.
 - Underlying records originate from official public registers; their
   respective terms govern redistribution (see the source registry in the
-  GitHub repository). The pipeline and schema are Apache-2.0; this dataset is CC BY-NC-SA 4.0.
+  GitHub repository). Everything is under the SNTIQ Dual License v1.0: fully permissive for non-commercial / human-rights / research use (attribution required); commercial, corporate and governmental use requires free written permission with a non-harm commitment (see LICENSE in the GitHub repository).
 
 ## Citation
 

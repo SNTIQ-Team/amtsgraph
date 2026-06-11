@@ -93,20 +93,32 @@ Key invariants (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)):
 
 ## Quickstart
 
+The database is **not committed to git** — download it from the latest
+[GitHub Release](https://github.com/SNTIQ-Team/amtsgraph/releases)
+(`atlas.sqlite` + SHA-256 + validation report) or take the JSONL export
+from the [Hugging Face dataset](https://huggingface.co/datasets/SNTIQ-Team/amtsgraph).
+
 ```bash
 pip install -r requirements.txt
 
-# explore the shipped database
+# get the database (verify the checksum!)
+gh release download -p 'atlas.sqlite*' -D data/
+sha256sum -c data/atlas.sqlite.sha256 && mv data/atlas.sqlite data/atlas.db
+
+# explore
 python3 tools/browser.py            # hierarchical browser + search on :8400
 sqlite3 data/atlas.db               # or query directly — see examples/
+uvicorn api.main:app                # API: /resolve/court, /stats, /health …
 
-# rebuild from sources (full Germany, ~4–6 h polite crawling, resumable)
+# or rebuild from sources (full Germany, ~4–6 h polite crawl, resumable)
 cd pipeline && ./run_full.sh
 python3 monitor.py                  # live btop-style harvest dashboard
-
-# serve the resolution API
-uvicorn api.main:app                # FastAPI: /places, /resolve/court, ...
 ```
+
+Every release ships `validation-report.json`, `coverage.md` and
+`sources-lock.yaml` — the machine-readable trust layer: what was checked,
+what passed, which source snapshots the build was made from, and where
+the known gaps are.
 
 Worked queries (SQL, Python, HTTP) live in [examples/](examples/).
 
@@ -150,10 +162,15 @@ expiring YAML patches that survive every rebuild.
 
 ## License
 
-- **Software & code** — [Apache License 2.0](LICENSE)
-- **Database contents, documentation & media** —
-  [CC BY-NC-SA 4.0](LICENSE-DATA) (attribution, non-commercial,
-  share-alike)
+**[SNTIQ Dual License v1.0](LICENSE)** — one repository, two tracks:
+
+- **Track A — Public Interest**: non-commercial, human-rights, research,
+  journalistic, educational and personal use is **fully permissive**.
+  Attribution required; no relicensing of derivatives.
+- **Track B — SNTIQ-CM**: commercial, corporate and governmental use
+  requires (free) written permission, a non-harm commitment, attribution,
+  and case-by-case reciprocity (a contribution to this project or a
+  donation to a human-rights / open-source organization).
 
 ## Repository layout
 
