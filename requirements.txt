@@ -1,0 +1,7 @@
+# pipeline
+requests
+beautifulsoup4
+PyYAML
+# api (optional until serving)
+fastapi
+uvicorn

@@ -1,0 +1,13 @@
+action: remove_competence
+reason: >
+  The Business Immigration Service is LEA's employer/skilled-worker branch,
+  not the general Ausländerbehörde for residents — replaced as THE Berlin
+  ABH answer by the general LEA record (2026-06-11-berlin-lea.yaml).
+source: "https://www.berlin.de/einwanderung/ueber-uns/"
+date: 2026-06-11
+expires: 2026-12-31
+match:
+  name: "LEA, Business Immigration Service (BIS)"
+competence:
+  kind: auslaenderbehoerde
+  area_prefix: "11000000"

@@ -1,0 +1,16 @@
+action: add_authority
+reason: >
+  PVOG surfaces only "LEA, Business Immigration Service (BIS)" — the
+  employer/skilled-worker branch — as Berlin's Ausländerbehörde. The
+  general immigration authority for residents is the Landesamt für
+  Einwanderung (LEA) itself.
+source: "https://www.berlin.de/einwanderung/"
+date: 2026-06-11
+expires: 2026-12-31
+authority:
+  kind: auslaenderbehoerde
+  name: "Landesamt für Einwanderung (LEA) Berlin"
+  city: "Berlin"
+  web: "https://www.berlin.de/einwanderung/"
+competences:
+  - { kind: auslaenderbehoerde, level: gemeinde, area: "11000000", rank: 0 }

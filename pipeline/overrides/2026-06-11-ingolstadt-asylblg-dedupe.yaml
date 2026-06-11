@@ -1,0 +1,15 @@
+action: remove_competence
+reason: >
+  PVOG lists both the generic "Stadt Ingolstadt - Amt für Soziales" and the
+  precise "Stadt Ingolstadt - Flucht und Integration -
+  Asylbewerberleistungen" as AsylbLG offices. The latter is the actual
+  intake unit; the generic Amt für Soziales keeps its sozialamt competence
+  and is removed only as an AsylbLG candidate to avoid a fake ambiguity.
+source: "https://www.ingolstadt.de/ (Verwaltungsgliederung: Flucht und Integration)"
+date: 2026-06-11
+expires: 2026-12-31
+match:
+  name: "Stadt Ingolstadt - Amt für Soziales"
+competence:
+  kind: asylblg_behoerde
+  area_prefix: "09161"

@@ -1,0 +1,72 @@
+# Probe services per authority kind for the PVOG harvest.
+#
+# For each Gemeinde-ARS the harvester tries the probes in order; the first
+# one that yields a competent Organisationseinheit wins (unless multi: true,
+# then ALL matching units across all probes are collected — used for kinds
+# where German practice genuinely varies and a single answer would be a lie).
+#
+# must_match filters service title+description (case-insensitive regex);
+# deny filters unit titles. Federal hotlines/service centers are denied
+# globally in fetch_pvog.py.
+#
+# Probe terms are deliberately redundant against renamings: Bürgergeld is
+# being renamed back to (Neue) Grundsicherung, so SGB-II kinds carry the
+# old, new and statutory names.
+
+kinds:
+  auslaenderbehoerde:
+    - q: Aufenthaltserlaubnis
+      must_match: "aufenthalt"
+    - q: Niederlassungserlaubnis
+      must_match: "niederlassung"
+  buergeramt:
+    - q: Personalausweis beantragen
+      must_match: "personalausweis"
+    - q: Anmeldung Wohnsitz
+      must_match: "anmeld|wohnsitz"
+  sozialamt:
+    - q: Hilfe zum Lebensunterhalt
+      must_match: "lebensunterhalt|sozialhilfe"
+    - q: Grundsicherung im Alter und bei Erwerbsminderung
+      must_match: "grundsicherung"
+  jobcenter:
+    # SGB-II Träger; renaming-proof probe set. prefer pulls real Jobcenter
+    # units to the front (zkT units are named very differently across
+    # Kreise: "Kommunale Arbeitsförderung", "Amt 55", ...), deny kills the
+    # service-description false friends (Wohngeld pages mention Bürgergeld).
+    - q: Bürgergeld
+      must_match: "bürgergeld|grundsicherung|sgb ii|arbeitsuchende"
+      prefer: "jobcenter|arbeitsförderung|grundsicherung für arbeit"
+      require: "jobcenter|arbeitsförderung|arbeit"
+      deny: "Bundesagentur für Arbeit \\(BA\\)|Familienkasse|Wohngeld|Ministerium|Sozialamt$"
+    - q: Grundsicherung für Arbeitsuchende
+      must_match: "grundsicherung|bürgergeld|sgb ii|arbeitsuchende"
+      prefer: "jobcenter|arbeitsförderung|grundsicherung für arbeit"
+      require: "jobcenter|arbeitsförderung|arbeit"
+      deny: "Bundesagentur für Arbeit \\(BA\\)|Familienkasse|Wohngeld|Ministerium|Sozialamt$"
+    - q: Arbeitslosengeld II
+      must_match: "arbeitslosengeld ii|alg ii|bürgergeld|grundsicherung"
+      prefer: "jobcenter|arbeitsförderung|grundsicherung für arbeit"
+      require: "jobcenter|arbeitsförderung|arbeit"
+      deny: "Bundesagentur für Arbeit \\(BA\\)|Familienkasse|Wohngeld|Ministerium|Sozialamt$"
+  asylblg_behoerde:
+    # AsylbLG competence varies wildly across Germany: sometimes the
+    # Sozialamt, sometimes a dedicated authority, sometimes a department.
+    # multi: collect every plausible unit; the API serves candidates + caveat.
+    multi: true
+    probes:
+      - q: Leistungen nach dem Asylbewerberleistungsgesetz
+        must_match: "asylbewerberleistung|asylblg"
+        deny: "Schulverwaltung|Schule|Bundesamt für Migration"
+      - q: Asylbewerberleistungsgesetz Grundleistungen
+        must_match: "asylbewerberleistung|asylblg|grundleistung"
+        deny: "Schulverwaltung|Schule|Bundesamt für Migration"
+  jugendamt:
+    - q: Beistandschaft
+      must_match: "beistandschaft|jugend"
+  standesamt:
+    - q: Eheschließung anmelden
+      must_match: "eheschließung"
+  gewerbeamt:
+    - q: Gewerbe anmelden
+      must_match: "gewerbe"

@@ -1,0 +1,23 @@
+# build artifacts & raw harvests (reproducible via pipeline/run_full.sh)
+data/atlas.db
+data/atlas.building
+data/snapshots/
+data/export/
+
+# runtime noise
+__pycache__/
+*.pyc
+pipeline/.tmp/
+pipeline/*.log
+.venv/
+
+# v1 archive (kept locally for reference, not published)
+bac/
+.bac/
+
+# local agent state
+.claude/
+
+# personal / application documents — never publish
+Vorhabensprofil_Fragebogen.docx
+docs/Vorhabensprofil_DRAFT.md

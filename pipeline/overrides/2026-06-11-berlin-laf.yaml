@@ -1,0 +1,18 @@
+action: add_authority
+reason: >
+  Berlin's primary authority for asylum seekers' benefits (AsylbLG) during
+  and after reception is the Landesamt für Flüchtlingsangelegenheiten
+  (LAF); the PVOG harvest surfaces only the district Sozialämter
+  (responsible after assignment to a Bezirk). Both are legitimate — LAF is
+  added as an additional rank-0 candidate; the existing multi-candidate
+  caveat correctly tells users to confirm which applies to their situation.
+source: "https://www.berlin.de/laf/"
+date: 2026-06-11
+expires: 2026-12-31
+authority:
+  kind: asylblg_behoerde
+  name: "Landesamt für Flüchtlingsangelegenheiten (LAF) Berlin"
+  city: "Berlin"
+  web: "https://www.berlin.de/laf/"
+competences:
+  - { kind: asylblg_behoerde, level: gemeinde, area: "11000000", rank: 0 }

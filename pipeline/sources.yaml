@@ -1,0 +1,48 @@
+# Source registry. Every dataset that feeds the DB is listed here;
+# the runner executes fetchers on their cadence and snapshots raw output
+# to data/snapshots/<id>/<YYYY-MM-DD>/ before staging.
+
+sources:
+  destatis_gv:
+    fetcher: fetch_destatis.py
+    cadence: quarterly
+    url: https://www.destatis.de/DE/Themen/Laender-Regionen/Regionales/Gemeindeverzeichnis/
+    notes: AuszugGV XLSX; canonical AGS/ARS spine. Parser exists in bac/MIN.REG.AMT/main.py.
+
+  openplz:
+    fetcher: fetch_openplz.py
+    cadence: quarterly
+    url: https://openplzapi.org/de/
+    notes: PLZ<->Gemeinde(AGS) M:N. pageSize max 50, paginate Localities.
+
+  pvog:
+    fetcher: fetch_pvog.py
+    cadence: weekly
+    url: https://pvog.fitko.net/suchdienst/api
+    notes: >
+      Behörden + Zuständigkeiten via LeiKa harvest per Gemeinde-ARS.
+      Incremental via organisationunit lastUpdate. No key needed.
+      LeiKa probe services per authority kind configured in pvog_leika.yaml.
+
+  justizadressen:
+    fetcher: fetch_courts.py
+    cadence: monthly
+    url: https://www.justizadressen.nrw.de/de/justiz/suche
+    notes: >
+      Selenium scrape (port of bac/main.py) driven per PLZ from openplz
+      snapshot, so jurisdiction is captured at PLZ granularity.
+
+  ba_jobcenter:
+    fetcher: fetch_ba.py
+    cadence: monthly
+    url: https://www.arbeitsagentur.de/vor-ort
+    notes: >
+      Port of bac/JC_AFA/main.py + SGB-II Traegerliste from
+      statistik.arbeitsagentur.de to cover zkT districts the site misses
+      (43 districts had no jobcenter in v1).
+
+  xrepository_abh:
+    fetcher: fetch_xrepository.py
+    cadence: on_release
+    url: https://www.xrepository.de/
+    notes: ABH-Kennung codelist (Ausländerbehörden) + GDS.Gerichte (courts) for identity checks.
