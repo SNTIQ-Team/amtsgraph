@@ -80,9 +80,7 @@ def export(out: Path) -> dict[str, int]:
 
 
 CARD = """---
-license: other
-license_name: source-dependent
-license_link: https://github.com/sntiq/amtsgraph/blob/main/docs/SOURCES.md
+license: cc-by-nc-sa-4.0
 language:
   - de
 pretty_name: "Amtsgraph — German public-authority competence graph"
@@ -145,7 +143,7 @@ provenance (source, URL, fetch timestamp).
   GitHub repository). The pipeline and schema are MIT-licensed.
 
 Source code, pipeline and full documentation:
-**https://github.com/sntiq/amtsgraph**
+**https://github.com/SNTIQ-Team/amtsgraph**
 """
 
 

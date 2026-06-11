@@ -145,8 +145,15 @@ expiring YAML patches that survive every rebuild.
 - AsylbLG coverage reflects what Land editorial systems publish —
   partial by nature, marked with caveats.
 - Data was harvested from official public registers; their respective
-  terms apply to redistribution of the underlying records (see
-  [docs/SOURCES.md](docs/SOURCES.md)). Code is MIT-licensed.
+  terms apply to the underlying records (see
+  [docs/SOURCES.md](docs/SOURCES.md)).
+
+## License
+
+- **Software & code** — [Apache License 2.0](LICENSE)
+- **Database contents, documentation & media** —
+  [CC BY-NC-SA 4.0](LICENSE-DATA) (attribution, non-commercial,
+  share-alike)
 
 ## Repository layout
 
@@ -169,7 +176,7 @@ expiring YAML patches that survive every rebuild.
              authorities, court competences and organisational structure},
   author  = {{SNTIQ}},
   year    = {2026},
-  url     = {https://github.com/sntiq/amtsgraph}
+  url     = {https://github.com/SNTIQ-Team/amtsgraph}
 }
 ```
 

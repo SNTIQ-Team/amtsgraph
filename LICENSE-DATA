@@ -1,0 +1,24 @@
+Amtsgraph — data, documentation and media license
+
+The database contents (data/atlas.db, data/export/*), documentation and
+media in this repository are licensed under:
+
+    Creative Commons Attribution-NonCommercial-ShareAlike 4.0
+    International (CC BY-NC-SA 4.0)
+    https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
+
+You are free to SHARE and ADAPT this material, provided you:
+  - give appropriate ATTRIBUTION ("Amtsgraph by SNTIQ,
+    https://github.com/SNTIQ-Team/amtsgraph"),
+  - do NOT use it for COMMERCIAL purposes,
+  - distribute derivatives under the SAME license (ShareAlike).
+
+NOTE ON UNDERLYING RECORDS: the dataset is a curated, validated
+compilation derived from official German public registers (Orts- und
+Gerichtsverzeichnis, PVOG, Bundesagentur für Arbeit, Destatis,
+BayernPortal, OpenPLZ, xRepository). This license covers the
+compilation, curation, normalization and enrichment performed by
+Amtsgraph; the respective terms of the official sources govern the
+underlying records themselves (see docs/SOURCES.md).
+
+The software and code are licensed separately under Apache-2.0 (LICENSE).
