@@ -142,6 +142,18 @@ provenance (source, URL, fetch timestamp).
   respective terms govern redistribution (see the source registry in the
   GitHub repository). The pipeline and schema are Apache-2.0; this dataset is CC BY-NC-SA 4.0.
 
+## Citation
+
+```bibtex
+@misc{{amtsgraph2026,
+  title   = {{Amtsgraph: an open validated graph of German public
+             authorities, court competences and organisational structure}},
+  author  = {{Glushkov, David and {{SNTIQ}}}},
+  year    = {{2026}},
+  url     = {{https://github.com/SNTIQ-Team/amtsgraph}}
+}}
+```
+
 Source code, pipeline and full documentation:
 **https://github.com/SNTIQ-Team/amtsgraph**
 """

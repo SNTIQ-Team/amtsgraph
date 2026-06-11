@@ -174,7 +174,7 @@ expiring YAML patches that survive every rebuild.
 @misc{amtsgraph2026,
   title   = {Amtsgraph: an open validated graph of German public
              authorities, court competences and organisational structure},
-  author  = {{SNTIQ}},
+  author  = {Glushkov, David and {SNTIQ}},
   year    = {2026},
   url     = {https://github.com/SNTIQ-Team/amtsgraph}
 }

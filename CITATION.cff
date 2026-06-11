@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use Amtsgraph, please cite it as below."
+title: "Amtsgraph: an open validated graph of German public authorities, court competences and organisational structure"
+type: dataset
+authors:
+  - family-names: Glushkov
+    given-names: David
+    website: "https://scholar.google.com/citations?user=OF0rKaUAAAAJ"
+  - name: "SNTIQ"
+    website: "https://sntiq.com/"
+year: 2026
+date-released: "2026-06-11"
+url: "https://github.com/SNTIQ-Team/amtsgraph"
+repository-code: "https://github.com/SNTIQ-Team/amtsgraph"
+license: Apache-2.0
