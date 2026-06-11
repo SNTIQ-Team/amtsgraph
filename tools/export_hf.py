@@ -140,7 +140,7 @@ provenance (source, URL, fetch timestamp).
   (pilot); other Länder resolve at authority level.
 - Underlying records originate from official public registers; their
   respective terms govern redistribution (see the source registry in the
-  GitHub repository). The pipeline and schema are MIT-licensed.
+  GitHub repository). The pipeline and schema are Apache-2.0; this dataset is CC BY-NC-SA 4.0.
 
 Source code, pipeline and full documentation:
 **https://github.com/SNTIQ-Team/amtsgraph**
