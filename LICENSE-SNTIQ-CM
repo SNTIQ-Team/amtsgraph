@@ -1,0 +1,246 @@
+SNTIQ-CM LICENSE, Version 1.0 (Code & Media)
+Commercial, Corporate & Governmental Use
+
+Copyright (c) 2026 David Glushkov / SNTIQ
+
+This is a general license of SNTIQ. It governs the use of the Materials
+of any SNTIQ project to which it is attached by commercial entities,
+corporations, public-sector bodies and any other user that does not
+qualify for the project's non-commercial track (see the project's
+LICENSING file).
+
+────────────────────────────────────────────────────────────────────────
+1. DEFINITIONS
+────────────────────────────────────────────────────────────────────────
+
+1.1 "Project" means the SNTIQ work to which this license is attached,
+    as identified in the accompanying LICENSING file.
+
+1.2 "Materials" means the Project's code, software, database contents,
+    datasets, exports, documentation and media, in any form, including
+    extracts and derivative works.
+
+1.3 "Licensor" means David Glushkov / SNTIQ, or the rights holder
+    designated in the Project's LICENSING file.
+
+1.4 "Commercial Use" means any use by or for an entity engaged in
+    commercial activity, any use intended for or directed toward
+    commercial advantage or monetary compensation, and any use in
+    products or services offered for a fee.
+
+1.5 "Governmental Use" means any use by or on behalf of a public-sector
+    body, authority or institution, at any level of government, in any
+    jurisdiction.
+
+1.6 "End User" means a natural person to whom the Materials, or
+    information derived from them, are presented.
+
+1.7 "Permission" means the prior written permission described in
+    Section 3.
+
+────────────────────────────────────────────────────────────────────────
+2. NO LICENSE WITHOUT PERMISSION
+────────────────────────────────────────────────────────────────────────
+
+2.1 No right to Commercial Use or Governmental Use of the Materials is
+    granted by mere possession, download or public availability of the
+    Materials. Any such use without a valid Permission is unlicensed
+    and constitutes infringement of copyright and, where applicable,
+    database rights.
+
+2.2 Evaluation. A prospective licensee may internally evaluate the
+    Materials for up to thirty (30) days solely to decide whether to
+    request Permission. Evaluation results must not be deployed,
+    published or offered to third parties.
+
+────────────────────────────────────────────────────────────────────────
+3. PERMISSION
+────────────────────────────────────────────────────────────────────────
+
+3.1 Permission is requested through the contact channel designated in
+    the Project's LICENSING file, identifying: the requesting entity,
+    the intended use, the products or services involved, and the
+    categories of End Users affected.
+
+3.2 Permission is granted or refused at the Licensor's sole discretion,
+    in writing (e-mail suffices). No license fee is charged.
+
+3.3 Permission is personal to the requesting entity, non-exclusive,
+    non-transferable and limited to the use described in the request.
+    Material changes of use require a new Permission.
+
+3.4 The Licensor may condition Permission on the reciprocity described
+    in Section 6.
+
+────────────────────────────────────────────────────────────────────────
+4. NON-HARM COVENANT
+────────────────────────────────────────────────────────────────────────
+
+4.1 The Materials and any tools, products or services derived from them
+    must not be used to the detriment of natural persons. Without
+    limiting the generality of the foregoing, the following uses are
+    prohibited under all circumstances:
+
+    (a) obstructing, delaying or discouraging any person's access to
+        justice, legal remedies or public services;
+    (b) identifying, profiling, scoring or targeting persons or groups
+        in a vulnerable position (including, without limitation,
+        asylum seekers, migrants, benefit recipients and persons in
+        debt) to their detriment;
+    (c) fully automated adverse decision-making about natural persons
+        without meaningful human review;
+    (d) surveillance of individuals or groups;
+    (e) optimizing, prioritizing or otherwise supporting enforcement
+        measures against individuals (including detention or removal
+        logistics);
+    (f) misleading End Users about rights, deadlines, procedures or the
+        competence of public authorities;
+    (g) any use that violates applicable law, including data-protection
+        law.
+
+4.2 Integrity of answers. Where the Materials ship caveat, uncertainty
+    or provenance information, the licensee must not suppress or strip
+    it when presenting derived information to End Users where it is
+    material to the correctness of what is presented. Presenting an
+    ambiguous answer as certain constitutes a breach of this license.
+
+4.3 The licensee shall impose obligations no less protective than this
+    Section 4 on any third party to whom it makes the Materials or
+    their outputs available as part of a product or service.
+
+────────────────────────────────────────────────────────────────────────
+5. ATTRIBUTION
+────────────────────────────────────────────────────────────────────────
+
+5.1 Every product, service, publication or dataset that uses the
+    Materials must visibly credit the Project in the form designated in
+    the Project's LICENSING file, or, absent such designation:
+
+        "Contains material from <Project> by SNTIQ — <Project URL>"
+
+    in a place reasonably noticeable to End Users (e.g. an about page,
+    imprint, data-sources page or dataset description).
+
+5.2 Attribution does not imply endorsement by the Licensor and must not
+    be presented in a way that suggests endorsement.
+
+────────────────────────────────────────────────────────────────────────
+6. RECIPROCITY
+────────────────────────────────────────────────────────────────────────
+
+6.1 As a condition of Permission, the Licensor may require, case by
+    case, ONE of the following, completed within the month preceding
+    the Permission request or within a period set in the Permission:
+
+    (a) a substantive contribution to the Project (code, data-quality
+        work, verified corrections or documentation); or
+    (b) a donation to a human-rights organization (preferred); or
+    (c) a donation to an open-source project.
+
+6.2 The nature and reasonable scope of the reciprocity are stated in
+    the Permission. Evidence of completion may be requested.
+
+────────────────────────────────────────────────────────────────────────
+7. RESTRICTIONS
+────────────────────────────────────────────────────────────────────────
+
+7.1 No relicensing or sublicensing. The Materials and derivatives may
+    not be distributed under different terms without separate written
+    permission from the Licensor.
+
+7.2 No resale of the Materials as such. Offering the Materials or a
+    substantially similar work as a standalone product is prohibited.
+
+7.3 No trademark rights. This license grants no rights to the name
+    "SNTIQ" or the Project's name beyond the attribution required by
+    Section 5.
+
+7.4 No removal of notices. Copyright, license, caveat and provenance
+    notices must be preserved in all copies and derivatives.
+
+────────────────────────────────────────────────────────────────────────
+8. TERM, TERMINATION, REMEDIES
+────────────────────────────────────────────────────────────────────────
+
+8.1 Permission remains in force until terminated. The Licensor may
+    terminate a Permission with thirty (30) days' written notice
+    without cause, and with immediate effect for breach.
+
+8.2 Any breach of Sections 4 (non-harm), 5 (attribution) or 7
+    (restrictions) terminates the Permission automatically, without
+    notice, as of the moment of breach. Breaches of other provisions
+    may be cured within fourteen (14) days of written notice; failing
+    cure, the Permission terminates.
+
+8.3 Upon termination, the licensee shall cease all use of the
+    Materials and destroy copies under its control, except as required
+    by law. Sections 4.2, 5, 9, 10, 11 and 12 survive termination.
+
+8.4 Remedies for unlicensed use or breach include, without limitation,
+    injunctive relief; the Licensor's right to claim damages remains
+    unaffected.
+
+────────────────────────────────────────────────────────────────────────
+9. NO WARRANTY; NOT LEGAL ADVICE
+────────────────────────────────────────────────────────────────────────
+
+9.1 THE MATERIALS ARE PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT
+    WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WITHOUT
+    LIMITATION WARRANTIES OF ACCURACY, COMPLETENESS, TIMELINESS,
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+    NON-INFRINGEMENT.
+
+9.2 Where the Materials contain information about laws, procedures or
+    public authorities, they constitute general information, not legal
+    advice. The licensee is solely responsible for verification before
+    any act with legal effect.
+
+────────────────────────────────────────────────────────────────────────
+10. LIMITATION OF LIABILITY
+────────────────────────────────────────────────────────────────────────
+
+10.1 To the maximum extent permitted by law, the Licensor shall not be
+     liable for any indirect, incidental, special, consequential or
+     punitive damages, loss of profits, loss of data or business
+     interruption arising out of or related to the Materials or this
+     license, regardless of the theory of liability.
+
+10.2 To the maximum extent permitted by law, the Licensor's aggregate
+     liability under this license shall not exceed EUR 100. Liability
+     for intent (Vorsatz), gross negligence (grobe Fahrlässigkeit) and
+     injury to life, body or health remains unaffected to the extent
+     it cannot be excluded under applicable law.
+
+────────────────────────────────────────────────────────────────────────
+11. INDEMNIFICATION
+────────────────────────────────────────────────────────────────────────
+
+11.1 The licensee shall indemnify and hold harmless the Licensor from
+     and against all claims, damages, liabilities and reasonable costs
+     (including legal fees) brought by third parties arising out of the
+     licensee's use of the Materials, including any breach of this
+     license.
+
+────────────────────────────────────────────────────────────────────────
+12. GENERAL
+────────────────────────────────────────────────────────────────────────
+
+12.1 Governing law: the law of the Federal Republic of Germany,
+     excluding its conflict-of-laws rules and the CISG.
+
+12.2 Venue: to the extent legally permissible, the courts at the
+     Licensor's seat in Germany.
+
+12.3 Severability: if a provision is held invalid, the remainder stays
+     in force; the invalid provision is replaced by the valid provision
+     that comes closest to its economic and protective purpose.
+
+12.4 Amendments and side agreements require text form (e-mail
+     suffices). This license, together with the issued Permission and
+     the Project's LICENSING file, constitutes the entire agreement
+     regarding the Materials.
+
+12.5 Third-party and official sources: where the Materials incorporate
+     records from third-party or official sources, the respective terms
+     of those sources govern the underlying records themselves, as
+     documented by the Project.

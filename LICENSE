@@ -1,68 +1,18 @@
-SNTIQ Dual License v1.0 — Amtsgraph
+Amtsgraph — Licensing
 Copyright (c) 2026 David Glushkov / SNTIQ
 
-This repository (code, database contents, documentation and media) is
-available under ONE of the following two tracks. By using the materials
-you accept the track that matches your use.
+This project is dual-licensed by audience. Three license texts apply:
 
-────────────────────────────────────────────────────────────────────────
-TRACK A — PUBLIC INTEREST LICENSE
-(non-commercial, human-rights, research, journalistic, educational and
- personal use)
-────────────────────────────────────────────────────────────────────────
+  NON-COMMERCIAL TRACK
+  (individuals, human-rights and non-profit organizations, research,
+   journalism, education)
+    - Code:                      LICENSE-APACHE-2.0
+    - Data, documentation, media: LICENSE-CC-BY-NC-SA-4.0
 
-Permission is hereby granted, free of charge, to any person or
-non-commercial organization obtaining a copy of these materials, to use,
-copy, modify, merge, publish and distribute them WITHOUT RESTRICTION,
-subject only to the following conditions:
+  COMMERCIAL / CORPORATE / GOVERNMENTAL TRACK
+    - Everything (code & media):  LICENSE-SNTIQ-CM
+      (written permission required; free of charge; non-harm covenant,
+       attribution and case-by-case reciprocity apply)
 
- 1. ATTRIBUTION. Any use, distribution or derivative must visibly credit
-    "Amtsgraph by SNTIQ — https://github.com/SNTIQ-Team/amtsgraph".
-
- 2. NO RELICENSING. Derivatives must be distributed under this same
-    license. Distributing the materials or derivatives under different
-    terms requires separate written permission from the author
-    (granted case by case).
-
- 3. NO WARRANTY. The materials are provided "AS IS", without warranty of
-    any kind. They constitute general information, not legal advice.
-
-────────────────────────────────────────────────────────────────────────
-TRACK B — SNTIQ-CM LICENSE (Code & Media)
-(commercial, corporate and governmental use)
-────────────────────────────────────────────────────────────────────────
-
-Use of these materials by commercial entities, corporations or
-governmental bodies is permitted ONLY under all of the following
-conditions:
-
- 1. NON-HARM. The materials and any tools derived from them must not be
-    used to the detriment of people — including, without limitation, to
-    obstruct access to justice, to profile or target vulnerable persons,
-    or to degrade the position of individuals before public authorities.
-
- 2. PERMISSION. Commercial use requires prior written permission from
-    the author. No license fee is charged. Attribution (as in Track A,
-    condition 1) is mandatory in all cases.
-
- 3. RECIPROCITY. As a condition of permission, the author may require —
-    case by case — ONE of the following, completed within the month
-    preceding the permission request:
-      (a) a substantive contribution to this project, or
-      (b) a donation to a human-rights organization (preferred), or
-      (c) a donation to an open-source project.
-
- 4. Conditions 2–3 of Track A (no relicensing, no warranty) apply
-    equally under this track.
-
-Permission requests: via https://sntiq.com/ or the repository issues.
-
-────────────────────────────────────────────────────────────────────────
-
-NOTE ON UNDERLYING RECORDS: the dataset is a curated, validated
-compilation derived from official German public registers (Orts- und
-Gerichtsverzeichnis, PVOG, Bundesagentur für Arbeit, Destatis,
-BayernPortal, OpenPLZ, xRepository). This license covers the
-compilation, curation, normalization, enrichment, code and media
-created by Amtsgraph; the respective terms of the official sources
-govern the underlying records themselves (see docs/SOURCES.md).
+Which track applies to you, the designated attribution string and the
+permission contact are defined in LICENSING.md. If in doubt, ask first.

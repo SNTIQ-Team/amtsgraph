@@ -81,8 +81,8 @@ def export(out: Path) -> dict[str, int]:
 
 CARD = """---
 license: other
-license_name: sntiq-dual-1.0
-license_link: https://github.com/SNTIQ-Team/amtsgraph/blob/main/LICENSE
+license_name: sntiq-dual-by-audience
+license_link: https://github.com/SNTIQ-Team/amtsgraph/blob/main/LICENSING.md
 language:
   - de
 pretty_name: "Amtsgraph — German public-authority competence graph"
@@ -160,7 +160,7 @@ Empty fields are deliberate, not dirty data:
   (pilot); other Länder resolve at authority level.
 - Underlying records originate from official public registers; their
   respective terms govern redistribution (see the source registry in the
-  GitHub repository). Everything is under the SNTIQ Dual License v1.0: fully permissive for non-commercial / human-rights / research use (attribution required); commercial, corporate and governmental use requires free written permission with a non-harm commitment (see LICENSE in the GitHub repository).
+  GitHub repository). Dual-licensed by audience: non-commercial / human-rights / research use under Apache-2.0 (code) + CC BY-NC-SA 4.0 (data); commercial, corporate and governmental use under the SNTIQ-CM License v1.0 (free written permission, non-harm covenant, attribution, reciprocity) — see LICENSING.md in the GitHub repository.
 
 ## Citation
 

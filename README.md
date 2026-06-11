@@ -162,15 +162,16 @@ expiring YAML patches that survive every rebuild.
 
 ## License
 
-**[SNTIQ Dual License v1.0](LICENSE)** — one repository, two tracks:
+Dual-licensed **by audience** — see [LICENSING.md](LICENSING.md):
 
-- **Track A — Public Interest**: non-commercial, human-rights, research,
-  journalistic, educational and personal use is **fully permissive**.
-  Attribution required; no relicensing of derivatives.
-- **Track B — SNTIQ-CM**: commercial, corporate and governmental use
-  requires (free) written permission, a non-harm commitment, attribution,
-  and case-by-case reciprocity (a contribution to this project or a
-  donation to a human-rights / open-source organization).
+- **Non-commercial** (individuals, NGOs, human-rights work, research,
+  journalism, education): code under
+  [Apache-2.0](LICENSE-APACHE-2.0), data/docs/media under
+  [CC BY-NC-SA 4.0](LICENSE-CC-BY-NC-SA-4.0).
+- **Commercial / corporate / governmental**: everything under the
+  [SNTIQ-CM License v1.0](LICENSE-SNTIQ-CM) — free written permission
+  with a non-harm covenant, attribution and case-by-case reciprocity
+  (contribution or human-rights / open-source donation).
 
 ## Repository layout
 
