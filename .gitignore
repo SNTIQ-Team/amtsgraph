@@ -24,3 +24,6 @@ docs/Vorhabensprofil_DRAFT.md
 
 # separate site repository living alongside (own git history)
 deutschlandtogether.github.io/
+
+# release artifacts belong to GitHub Releases, not git history
+data/release/
