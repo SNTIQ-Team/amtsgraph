@@ -26,13 +26,13 @@ location?* It covers:
 
 | | |
 |---|---|
-| Active authorities | **19,463** |
+| Active authorities | **19,226** |
 | Court-chain links (place × matter × instance) | **338,873** |
-| Competence assignments | **79,630** |
+| Competence assignments | **77,454** |
 | Organisational parent edges (Bavaria) | **7,195** |
 | Derived appeal edges (cross-checked) | **1,065** |
 | Municipalities / postal codes covered | **10,950 / 8,205** |
-| Honest-gap caveats served with answers | **5,369** |
+| Honest-gap caveats served with answers | **5,359** |
 
 ## Why this dataset is different
 
@@ -64,18 +64,21 @@ the official GDS.Gerichte codelist (0 outliers).
 ## Data model
 
 ```
-GEO plane                AUTHORITY plane             COURT TRUTH
-─────────                ───────────────             ───────────
-land → kreis → gemeinde  authority (typed, with      court_chain
-        ▲    ▲             provenance + validity)     (plz × ortk × matter ×
- gemeinde_plz (M:N)        ▲         ▲                 position → authority)
-        │                  │         │                exact harvested
-       plz            competence  authority_edge      instance chains
-        │             (kind × area  parent / appeal /
-   jz_place            × rank)      supervision / successor
-   official court
-   resolution register   matter (14+ legal-matter taxonomy)
-                         caveat  (warnings the API must surface)
+GEO plane             AUTHORITY plane                         COURT TRUTH
+─────────             ───────────────                         ───────────
+land                  authority                               court_chain
+ └─ kreis               typed · provenance                    (plz × ortk × matter ×
+     └─ gemeinde        validity window                        position → authority)
+         ▲    ▲           ▲           ▲                       exact harvested
+         │    │           │           │                       instance chains,
+gemeinde_plz  │       competence   authority_edge             served verbatim —
+   (M:N)      │       kind × area  parent / appeal /          the edge graph is
+         │    │         × rank     supervision / successor    derived and
+        plz   │                    (δ directionality          cross-checked,
+         │    │                     + trust)                  never the answer
+     jz_place ┘
+(official court       matter — legal-matter taxonomy
+ resolution register) caveat — warnings the API must surface
 ```
 
 Key invariants (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)):
