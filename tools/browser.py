@@ -352,6 +352,7 @@ header{padding:10px 18px;background:var(--bg2);display:flex;gap:16px;align-items
 border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
 .brand{font-weight:700;font-size:16px;letter-spacing:.3px;white-space:nowrap;
 display:flex;align-items:center;gap:8px}
+.brand{line-height:24px}
 .brand .logo{width:22px;height:22px;border-radius:5px}
 .brand small{color:var(--dim);font-weight:400;font-size:12px;margin-left:2px}
 #stats{color:var(--dim2);font-size:12px;margin-left:auto;white-space:nowrap}
@@ -398,6 +399,8 @@ nav button.on{color:var(--fg);background:var(--bg3);border-color:var(--line)}
 padding:6px 11px;cursor:pointer;font-size:12px;font-weight:600}
 .lang button.on{background:var(--acc);color:#08121f}
 .built{color:var(--dim2);font-size:12px;white-space:nowrap}
+.hlink{color:var(--dim);font-size:12.5px;font-weight:600;letter-spacing:.2px}
+.hlink:hover{color:var(--acc);text-decoration:none}
 .pulse{display:inline-block;width:7px;height:7px;border-radius:50%;
 background:var(--ok);margin-right:6px;vertical-align:middle}
 main{flex:1;display:flex;min-height:0;position:relative;overflow:hidden}
@@ -483,6 +486,8 @@ padding:6px 14px;font-size:12px;color:var(--dim);backdrop-filter:blur(6px);max-w
   <button data-v="graph" data-i="nav_graph"></button>
  </nav>
  <div class="right">
+  <a class="hlink" href="https://github.com/SNTIQ-Team/amtsgraph/blob/main/docs/API.md" target="_blank" rel="noopener">Docs</a>
+  <a class="hlink" href="https://api.sntiq.com/v1/docs" target="_blank" rel="noopener">API</a>
   <div class="lang"><button data-l="de" class="on">DE</button><button data-l="en">EN</button></div>
   <span class="built" id="built"><span class="pulse"></span>…</span></div>
 </header>
@@ -584,7 +589,7 @@ const fmtDate=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s||'');return m?`${m[3
 let STATS=null;
 function renderStatsBar(){
   const st=STATS,loc=LANG==='de'?'de':'en';
-  $('#built').innerHTML=`<span class="pulse"></span>${tr('stand')} ${fmtDate(st.built_at)}`;
+  $('#built').innerHTML=`<span class="pulse"></span>${tr('stand')} ${fmtDate(st.built_at)} ${(st.built_at||'').slice(11,16)} UTC`;
   const cells=[['acc',st.authorities,'s_beh'],['',st.places,'s_orte'],
     ['acc',st.chain_links,'s_links'],['',st.competences,'s_komp'],
     ['by',st.gemeinden,'s_gem'],['',st.caveats,'s_hinw']];
