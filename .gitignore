@@ -21,3 +21,6 @@ bac/
 # personal / application documents — never publish
 Vorhabensprofil_Fragebogen.docx
 docs/Vorhabensprofil_DRAFT.md
+
+# separate site repository living alongside (own git history)
+deutschlandtogether.github.io/

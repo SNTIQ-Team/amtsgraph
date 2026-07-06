@@ -175,6 +175,16 @@ CREATE INDEX idx_chain_auth ON court_chain(authority_id);
 
 -- Derived/auxiliary relations. For courts these are DERIVED from court_chain
 -- and cross-checked by validate.py — never the primary source of an answer.
+-- Edges carry QFS-inspired traversal semantics:
+--   delta  in [0,1]: flow directionality. 1.0 = strictly directed (appeal:
+--          you can only appeal upward), ~0.45 = semi-directed (parent:
+--          department -> parent is an easy hop, parent -> one of many
+--          departments is a costly fan-out), 0.0 = symmetric.
+--   trust  in [0,1]: provenance confidence of the edge itself, seeded from
+--          source_trust of whatever produced it.
+-- Conductance of a hop from A to B: 0.5 + 0.5*delta*(role_A - role_B),
+-- with role +1 at the edge's from-side and -1 at its to-side; traversal
+-- cost = -log(conductance * trust). See api /graph endpoints.
 CREATE TABLE authority_edge (
     from_authority INTEGER NOT NULL REFERENCES authority(id),
     to_authority   INTEGER NOT NULL REFERENCES authority(id),
@@ -182,8 +192,36 @@ CREATE TABLE authority_edge (
                   ('appeal','supervision','parent','successor')),
     matter      TEXT REFERENCES matter(code),    -- appeal edges are matter-specific
     note        TEXT,
+    delta       REAL NOT NULL DEFAULT 1.0,
+    trust       REAL NOT NULL DEFAULT 0.8,
     PRIMARY KEY (from_authority, to_authority, relation, matter)
 );
+
+-- provenance confidence per source, used to seed edge/record trust
+CREATE TABLE source_trust (
+    source      TEXT PRIMARY KEY,
+    trust       REAL NOT NULL,                -- 0..1
+    rationale   TEXT
+);
+INSERT INTO source_trust VALUES
+    ('justizadressen', 0.95, 'official federal/state court register, harvested per place x matter'),
+    ('bayernportal',   0.90, 'official Land portal organigrams'),
+    ('ba',             0.95, 'official BA SGB-II Traeger register'),
+    ('pvog',           0.75, 'federal aggregate of Land editorial systems; quality varies by Land'),
+    ('destatis',       0.98, 'official municipal register'),
+    ('override',       0.85, 'manually verified correction with documented source');
+
+-- QFS-style hyperedge view: a court chain (place x matter) is one
+-- hyperedge whose endpoints carry roles — the place is the source (+1),
+-- courts are sinks graded by instance (-position/10), prosecution offices
+-- are near-neutral participants.
+CREATE VIEW hyperedge_court AS
+SELECT plz || '|' || ortk || '|' || matter          AS hyperedge_id,
+       plz, ortk, matter, authority_id,
+       CASE role WHEN 'prosecution' THEN -0.05
+                 ELSE -CAST(position AS REAL) / 10 END AS endpoint_role,
+       role, position
+FROM court_chain;
 
 -- ============================================================== CAVEATS
 

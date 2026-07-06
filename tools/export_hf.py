@@ -35,7 +35,8 @@ TABLES: dict[str, str] = {
     "competences": """
         SELECT authority_id, kind, level, area, rank FROM competence""",
     "edges": """
-        SELECT from_authority, to_authority, relation, matter, note
+        SELECT from_authority, to_authority, relation, matter, note,
+               delta, trust
         FROM authority_edge""",
     "places_courts": """
         SELECT plz, ortk, ort, gs_key, gemeinde_ags FROM jz_place""",

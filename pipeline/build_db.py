@@ -195,7 +195,8 @@ def load_justiz(db: sqlite3.Connection, snap: Path):
     # derived appeal edges (court role only), cross-checked by validate
     for (plz, ortk, matter), rows in _group_chains(db):
         for lower, upper in zip(rows, rows[1:]):
-            db.execute("INSERT OR IGNORE INTO authority_edge VALUES (?,?,?,?,?)",
+            db.execute("INSERT OR IGNORE INTO authority_edge VALUES "
+                       "(?,?,?,?,?, 1.0, 0.95)",   # strictly directed, official register
                        (lower, upper, "appeal", matter, f"derived:{plz}|{ortk}"))
 
     # any (place x core matter) the register answered empty even on retry is
@@ -365,7 +366,8 @@ def load_pvog(db: sqlite3.Connection, snap: Path):
             ambiguous[(ags, kind)] = 1
     for lo, ob in supervision_edges:
         db.execute("INSERT OR IGNORE INTO authority_edge VALUES "
-                   "(?,?,'supervision',NULL,'asylblg: übergeordnete Behörde')",
+                   "(?,?,'supervision',NULL,'asylblg: übergeordnete Behörde',"
+                   " 0.7, 0.75)",       # semi-directed upward, pvog trust
                    (lo, ob))
     if supervision_edges:
         print(f"pvog: {len(supervision_edges)} supervision edges (asylblg)")
@@ -402,31 +404,34 @@ def load_pvog(db: sqlite3.Connection, snap: Path):
 def load_ba(db: sqlite3.Connection, snap: Path):
     """SGB-II Jobcenter register: authoritative for existence + legal form.
 
-    Per Träger: if exactly one PVOG-harvested jobcenter authority already
-    serves Gemeinden of the Träger's Kreis(e), enrich it (legal_form +
-    kreis-level competence) — it has address/contacts. Otherwise insert the
-    BA record standalone (gE are usually absent from PVOG).
+    Enrichment respects SPLIT Kreise: where a Kreis is served by more than
+    one Träger (12 such Kreise nationwide), local offices must NOT blindly
+    inherit a legal form — the office may belong to either Träger. There we
+    leave legal_form unset on PVOG offices, create the BA Träger records
+    with kreis competence, and rely on the split caveat.
     """
     zuord: dict[str, list[dict]] = {}
+    traeger_by_kreis: dict[str, set[str]] = {}
+    split_kreise: set[str] = set()
     for z in read_jsonl(snap / "zuordnung.jsonl"):
         zuord.setdefault(z["traeger_nr"], []).append(z)
+        traeger_by_kreis.setdefault(z["kreis_ags"], set()).add(z["traeger_nr"])
+        if z["split"]:
+            split_kreise.add(z["kreis_ags"])
+    split_kreise |= {k for k, ts in traeger_by_kreis.items() if len(ts) > 1}
 
     merged = created = 0
     for t in read_jsonl(snap / "traeger.jsonl"):
         kreise = zuord.get(t["traeger_nr"], [])
-        kreis_ids = [z["kreis_ags"] for z in kreise]
-        # PVOG jobcenter authorities serving gemeinden inside these kreise
+        # inheritance is only safe where this Träger is the ONLY one
+        sole_kreise = [z["kreis_ags"] for z in kreise
+                       if z["kreis_ags"] not in split_kreise]
         rows = db.execute(f"""
             SELECT DISTINCT c.authority_id FROM competence c
             WHERE c.kind='jobcenter' AND c.level='gemeinde'
-              AND substr(c.area,1,5) IN ({','.join('?' * len(kreis_ids))})
-            """, kreis_ids).fetchall() if kreis_ids else []
+              AND substr(c.area,1,5) IN ({','.join('?' * len(sole_kreise))})
+            """, sole_kreise).fetchall() if sole_kreise else []
         if rows:
-            # the Träger's legal form applies kreis-wide: every local
-            # PVOG-harvested office (zkT Kommunen often run one per town)
-            # inherits it; kreis-level competence goes to the single office
-            # only when it is unique, otherwise gemeinde rows already
-            # resolve finer
             for (aid,) in rows:
                 db.execute("UPDATE authority SET legal_form=? WHERE id=?",
                            (t["legal_form"], aid))
@@ -435,11 +440,16 @@ def load_ba(db: sqlite3.Connection, snap: Path):
                                               t["traeger_nr"]))
             merged += len(rows)
             if len(rows) == 1:
-                for z in kreise:
+                for k in sole_kreise:
                     db.execute("INSERT OR IGNORE INTO competence VALUES "
-                               "(?,'jobcenter','kreis',?,0)",
-                               (rows[0][0], z["kreis_ags"]))
-        else:
+                               "(?,'jobcenter','kreis',?,0)", (rows[0][0], k))
+        # standalone BA record when the Träger has no enrichable office OR
+        # serves split Kreise (there it is the only reliable answer)
+        standalone_kreise = ([z["kreis_ags"] for z in kreise]
+                             if not rows else
+                             [z["kreis_ags"] for z in kreise
+                              if z["kreis_ags"] in split_kreise])
+        if standalone_kreise:
             cur = db.execute(
                 """INSERT INTO authority (kind,name,name_norm,legal_form,
                      source,source_url,fetched_at)
@@ -451,19 +461,50 @@ def load_ba(db: sqlite3.Connection, snap: Path):
             created += 1
             db.execute("INSERT OR IGNORE INTO authority_external_id "
                        "VALUES (?,?,?)", (aid, "ba_traeger", t["traeger_nr"]))
-            for z in kreise:
+            for k in standalone_kreise:
                 db.execute("INSERT OR IGNORE INTO competence VALUES "
-                           "(?,'jobcenter','kreis',?,0)", (aid, z["kreis_ags"]))
-            if z["split"]:
-                db.execute(
-                    """INSERT INTO caveat (scope_level,scope_key,matter,
-                         severity,text_de,source)
-                       VALUES ('kreis',?,NULL,'warn',?,'ba')""",
-                    (z["kreis_ags"],
-                     f"Der Kreis {z['kreis_name']} ist auf mehrere "
-                     f"Jobcenterbezirke aufgeteilt — Zuständigkeit bitte "
-                     f"beim Jobcenter bestätigen."))
-    print(f"ba: jobcenter enriched {merged}, created {created}")
+                           "(?,'jobcenter','kreis',?,0)", (aid, k))
+
+    # an office reached by SEVERAL Träger (it serves gemeinden across
+    # their Kreise) may only keep a legal form all of them agree on
+    traeger_form = {}
+    for t in read_jsonl(snap / "traeger.jsonl"):
+        traeger_form[t["traeger_nr"]] = t["legal_form"]
+    conflicted = db.execute("""
+        SELECT e.authority_id, GROUP_CONCAT(DISTINCT e.value)
+        FROM authority_external_id e
+        WHERE e.scheme='ba_traeger'
+        GROUP BY e.authority_id HAVING COUNT(DISTINCT e.value) > 1""").fetchall()
+    n_conflict = 0
+    for aid, values in conflicted:
+        forms = {traeger_form.get(v) for v in values.split(",")}
+        if len(forms) > 1:
+            db.execute("UPDATE authority SET legal_form=NULL WHERE id=?",
+                       (aid,))
+            db.execute(
+                """INSERT INTO caveat (scope_level,scope_key,matter,severity,
+                     text_de,source) VALUES ('authority',?,NULL,'warn',?,'ba')""",
+                (str(aid),
+                 "Dieses Jobcenter liegt im Gebiet mehrerer SGB-II-Träger "
+                 "mit unterschiedlicher Rechtsform — Trägerschaft bitte "
+                 "direkt beim Jobcenter erfragen."))
+            n_conflict += 1
+    if n_conflict:
+        print(f"ba: {n_conflict} offices with conflicting Träger forms "
+              f"— legal_form cleared + caveat")
+
+    for z in {(z2["kreis_ags"], z2["kreis_name"])
+              for zs in zuord.values() for z2 in zs
+              if z2["kreis_ags"] in split_kreise}:
+        db.execute(
+            """INSERT INTO caveat (scope_level,scope_key,matter,
+                 severity,text_de,source)
+               VALUES ('kreis',?,NULL,'warn',?,'ba')""",
+            (z[0], f"Der Kreis {z[1]} ist auf mehrere Jobcenterbezirke "
+                   f"aufgeteilt — Zuständigkeit bitte beim Jobcenter "
+                   f"bestätigen."))
+    print(f"ba: jobcenter enriched {merged}, created {created}, "
+          f"{len(split_kreise)} split Kreise protected")
 
 
 def _match_authority(db, m: dict):
@@ -563,9 +604,35 @@ def load_bayernportal(db: sqlite3.Connection, snap: Path):
 
         aid_by_key: dict[str, int] = {}
         kind_hits: dict[str, list[int]] = {}
+        # most-specific-wins: a container (Abteilung 2 - Jugend, Familie,
+        # Soziales) must not compete with its own child department
+        # (Sachgebiet 24 - Kreisjugendamt). A unit only counts for a kind
+        # if none of its DESCENDANTS matches the same kind.
+        parent_of = {u["key"]: u.get("parent_key") for u in units}
+
+        def ancestors(key):
+            k = parent_of.get(key)
+            while k:
+                yield k
+                k = parent_of.get(k)
+
+        kind_of: dict[str, str] = {}
         for u in units:
-            kind = next((k for rx, k in DEPT_KIND if rx.search(u["name"])),
-                        "sonstige")
+            kind_of[u["key"]] = next(
+                (k for rx, k in DEPT_KIND if rx.search(u["name"])), "sonstige")
+        shadowed: set[str] = set()
+        for u in units:
+            k = kind_of[u["key"]]
+            if k == "sonstige":
+                continue
+            for anc in ancestors(u["key"]):
+                if kind_of.get(anc) == k:
+                    shadowed.add(anc)
+
+        for u in units:
+            kind = kind_of[u["key"]]
+            if u["key"] in shadowed:
+                kind = "sonstige"          # stays in the web, loses the hat
             full_name = (u["name"] if u["name"].lower().startswith(
                 ("landratsamt", "stadt", "landeshauptstadt"))
                 else f"{root_name} - {u['name']}")
@@ -607,7 +674,8 @@ def load_bayernportal(db: sqlite3.Connection, snap: Path):
                       if u.get("parent_key") else root_aid)
             if child and parent and child != parent:
                 db.execute("INSERT OR IGNORE INTO authority_edge VALUES "
-                           "(?,?,'parent',NULL,'bayernportal organigramm')",
+                           "(?,?,'parent',NULL,'bayernportal organigramm',"
+                           " 0.45, 0.90)",  # dept->parent easy, parent->dept fan-out
                            (child, parent))
                 n_edges += 1
 
