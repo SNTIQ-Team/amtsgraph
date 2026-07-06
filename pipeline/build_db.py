@@ -42,6 +42,9 @@ KIND_BY_NAME = [  # order matters: first match wins
     ("verwaltungsgerichtshof", "oberverwaltungsgericht"),
     ("landgericht", "landgericht"),
     ("amtsgericht", "amtsgericht"),
+    ("mahngericht", "amtsgericht"),   # central Mahngerichte are AG departments
+    ("ag ", "amtsgericht"),           # register abbreviates: 'AG Aschersleben - …'
+    ("vollstreckungsgericht", "amtsgericht"),
     ("sozialgericht", "sozialgericht"),
     ("verwaltungsgericht", "verwaltungsgericht"),
     ("arbeitsgericht", "arbeitsgericht"),
@@ -616,23 +619,23 @@ def load_bayernportal(db: sqlite3.Connection, snap: Path):
                 yield k
                 k = parent_of.get(k)
 
-        kind_of: dict[str, str] = {}
+        # a unit may wear SEVERAL hats ("21 Ausländer- und
+        # Asylangelegenheiten" is both the ABH and the AsylbLG office)
+        kinds_of: dict[str, list[str]] = {}
         for u in units:
-            kind_of[u["key"]] = next(
-                (k for rx, k in DEPT_KIND if rx.search(u["name"])), "sonstige")
-        shadowed: set[str] = set()
+            kinds_of[u["key"]] = [k for rx, k in DEPT_KIND
+                                  if rx.search(u["name"])]
+        shadowed: dict[str, set[str]] = {}      # key -> kinds shadowed by a child
         for u in units:
-            k = kind_of[u["key"]]
-            if k == "sonstige":
-                continue
-            for anc in ancestors(u["key"]):
-                if kind_of.get(anc) == k:
-                    shadowed.add(anc)
+            for k in kinds_of[u["key"]]:
+                for anc in ancestors(u["key"]):
+                    if k in kinds_of.get(anc, []):
+                        shadowed.setdefault(anc, set()).add(k)
 
         for u in units:
-            kind = kind_of[u["key"]]
-            if u["key"] in shadowed:
-                kind = "sonstige"          # stays in the web, loses the hat
+            ukinds = [k for k in kinds_of[u["key"]]
+                      if k not in shadowed.get(u["key"], set())]
+            kind = ukinds[0] if ukinds else "sonstige"
             full_name = (u["name"] if u["name"].lower().startswith(
                 ("landratsamt", "stadt", "landeshauptstadt"))
                 else f"{root_name} - {u['name']}")
@@ -661,11 +664,12 @@ def load_bayernportal(db: sqlite3.Connection, snap: Path):
                            "VALUES (?,?,?)",
                            (aid, "bayernportal_oe", u["oe_id"]))
             aid_by_key[u["key"]] = aid
-            if kind != "sonstige" and kreis:
-                db.execute("INSERT OR IGNORE INTO competence VALUES "
-                           "(?,?,'kreis',?,0)", (aid, kind, kreis))
-                kind_hits.setdefault(kind, []).append(aid)
-                n_comp += 1
+            if kreis:
+                for k in ukinds:
+                    db.execute("INSERT OR IGNORE INTO competence VALUES "
+                               "(?,?,'kreis',?,0)", (aid, k, kreis))
+                    kind_hits.setdefault(k, []).append(aid)
+                    n_comp += 1
 
         # parent web: child -> parent (top-level units hang on the root)
         for u in units:
@@ -692,6 +696,42 @@ def load_bayernportal(db: sqlite3.Connection, snap: Path):
                             (level='gemeinde' AND substr(area,1,5)=?))""",
                     (kind, ids[0], kreis, kreis))
                 n_replaced += cur.rowcount
+
+    # cross-source dedup: a PVOG OE and a BayernPortal unit describing the
+    # same real-world office (identical normalized name) must be ONE node —
+    # otherwise the PVOG twin floats outside the organisational web
+    n_merged = 0
+    for pvog_id, bp_id in db.execute("""
+            SELECT p.id, MIN(b.id) FROM authority p
+            JOIN authority b ON b.name_norm = p.name_norm
+                AND b.source='bayernportal' AND b.valid_to IS NULL
+            WHERE p.source='pvog' AND p.valid_to IS NULL
+            GROUP BY p.id""").fetchall():
+        # transfer competences and edges, prefer pvog contact data where
+        # the portal card was empty
+        db.execute("""UPDATE OR IGNORE competence SET authority_id=?
+                      WHERE authority_id=?""", (bp_id, pvog_id))
+        db.execute("DELETE FROM competence WHERE authority_id=?", (pvog_id,))
+        for col in ("street", "plz", "city", "phone", "fax", "email",
+                    "web", "hours"):
+            db.execute(f"""UPDATE authority SET {col} =
+                             COALESCE({col}, (SELECT {col} FROM authority
+                                              WHERE id=?))
+                           WHERE id=?""", (pvog_id, bp_id))
+        db.execute("""UPDATE OR IGNORE authority_edge SET from_authority=?
+                      WHERE from_authority=?""", (bp_id, pvog_id))
+        db.execute("""UPDATE OR IGNORE authority_edge SET to_authority=?
+                      WHERE to_authority=?""", (bp_id, pvog_id))
+        db.execute("DELETE FROM authority_edge WHERE from_authority=? "
+                   "OR to_authority=?", (pvog_id, pvog_id))
+        db.execute("INSERT OR IGNORE INTO authority_external_id "
+                   "SELECT ?, scheme, value FROM authority_external_id "
+                   "WHERE authority_id=?", (bp_id, pvog_id))
+        db.execute("UPDATE authority SET valid_to=? WHERE id=?",
+                   (now(), pvog_id))
+        n_merged += 1
+    if n_merged:
+        print(f"bayernportal: {n_merged} cross-source duplicates merged")
 
     # pvog offices orphaned by replacement: retire (the web keeps
     # bayernportal units alive via parent edges)
