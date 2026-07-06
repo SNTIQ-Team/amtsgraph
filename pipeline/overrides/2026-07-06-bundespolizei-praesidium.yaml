@@ -1,0 +1,38 @@
+action: add_authority
+reason: >
+  The Bundespolizei (Federal Police) is the federal authority for border
+  control / Grenzübertritt (§2 BPolG) — relevant to migration matters
+  (entry, Zurückweisung, Grenzübertrittsbescheinigung) that sit alongside
+  the BAMF asylum process, and entirely absent from the automated sources.
+  Added at the level of the Bundespolizeipräsidium in Potsdam with a
+  nationwide land-level competence (one row per Bundesland 01..16). The
+  subordinate Bundespolizeidirektionen/-inspektionen are intentionally NOT
+  added — their per-region boundaries could not be verified cheaply and
+  honesty is preferred over unverified coverage.
+source: "https://www.bundespolizei.de/die-bundespolizei/organisation/bundespolizeipraesidium-potsdam"
+date: 2026-07-06
+expires: 2026-12-31
+authority:
+  kind: bundespolizei
+  name: "Bundespolizeipräsidium"
+  street: "Heinrich-Mann-Allee 103"
+  plz: "14473"
+  city: "Potsdam"
+  web: "https://www.bundespolizei.de"
+competences:
+  - { kind: bundespolizei, level: land, area: "01", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "02", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "03", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "04", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "05", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "06", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "07", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "08", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "09", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "10", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "11", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "12", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "13", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "14", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "15", rank: 0 }
+  - { kind: bundespolizei, level: land, area: "16", rank: 0 }

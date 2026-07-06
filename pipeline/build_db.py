@@ -303,6 +303,14 @@ def load_pvog(db: sqlite3.Connection, snap: Path):
     ASYL_NOISE = re.compile(
         r"kindertag|frühkindlich|entgelt|frauen|tagestreff|bildung|schul|"
         r"kultur|sport|senioren(?!.*asyl)|"
+        # structurally never the AsylbLG *benefit* office: Jobcenter admins
+        # SGB II (mutually exclusive with AsylbLG §1 by law); civil-registry
+        # and vehicle desks are unrelated. Dropped only when a non-noise
+        # candidate remains — the `kept = … or uniq` fallback below keeps
+        # a pure-noise area's row rather than emptying it.
+        r"jobcenter|job-center|\bstandesamt|gewerbeamt|zulassungsstelle|"
+        r"\bkfz\b|führerschein|fahrerlaubnis|meldebeh|einwohnermeldeamt|"
+        r"personalausweis|reisepass|\bwahlamt|friedhof|"
         # courts belong in court_chain, not as application offices
         r"sozialgericht|verwaltungsgericht|amtsgericht|landgericht", re.I)
     # höhere Verwaltungsebene: zuständig für Unterbringung/Aufsicht, nicht
@@ -390,6 +398,29 @@ def load_pvog(db: sqlite3.Connection, snap: Path):
             (ags, f"Für '{kind}' nennt der Zuständigkeitsfinder mehrere "
                   f"Stellen; die Praxis ist regional unterschiedlich — "
                   f"bitte vor Antragstellung telefonisch bestätigen."))
+    # Bayern: AsylbLG competence is PHASE-dependent, which no per-place
+    # table can capture. During residence in a staatliche Aufnahme-
+    # einrichtung (incl. ANKER-Einrichtungen) the Regierung des Bezirks
+    # grants the benefits; only after Zuweisung to a Landkreis / kreisfreie
+    # Stadt does the local authority take over (DVAsyl / AsylbLG § 10 iVm
+    # bayer. Zuständigkeitsrecht). This is exactly why 600 Bavarian areas
+    # resolve only to a Regierung. Surface it per Kreis so the API can say
+    # "which office depends on your phase", not guess one.
+    n_anker = 0
+    for (kreis_ags,) in db.execute(
+            "SELECT ags FROM kreis WHERE land_code='09'").fetchall():
+        db.execute(
+            """INSERT INTO caveat (scope_level,scope_key,matter,severity,
+                 text_de,source) VALUES ('kreis',?,NULL,'info',?,'sntiq')""",
+            (kreis_ags,
+             "AsylbLG in Bayern: Während des Aufenthalts in einer "
+             "staatlichen Aufnahmeeinrichtung (z. B. ANKER-Einrichtung) "
+             "gewährt die Regierung des Bezirks die Leistungen; erst nach "
+             "der Zuweisung an einen Landkreis / eine kreisfreie Stadt ist "
+             "die dortige Behörde zuständig (DVAsyl). Im Einzelfall — je "
+             "nach Unterbringungsphase — telefonisch bestätigen."))
+        n_anker += 1
+    print(f"bayern: {n_anker} ANKER/Aufnahmephase AsylbLG caveats")
     # units whose every competence row was filtered out as noise (Kita fee
     # offices etc. caught by the AsylbLG multi-probe) have no place in the DB
     db.execute("""DELETE FROM authority_external_id WHERE authority_id IN (

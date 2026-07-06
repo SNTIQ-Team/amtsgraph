@@ -1,0 +1,40 @@
+action: add_authority
+reason: >
+  The Bundesamt für Migration und Flüchtlinge (BAMF) is the federal
+  authority that DECIDES asylum applications nationwide (§5 AsylG). Its
+  processing delay is what triggers the §75 VwGO Untätigkeitsklage, yet the
+  automated sources (PVOG/BayernPortal) surface only the local AsylbLG
+  benefit offices — the deciding federal body was entirely absent. Added as
+  the nationwide rank-0 asylum-decision authority: one land-level competence
+  row per Bundesland (01..16), so every Gemeinde resolves to the BAMF for
+  kind 'bamf'. Headquarters (Zentrale) in Nürnberg; regional Außenstellen
+  are added separately (see the bamf-* branch overrides) and are
+  subordinate to this HQ (parent relation noted but not modelled — the
+  override mechanism cannot add authority_edge rows).
+source: "https://www.bamf.de/DE/Behoerde/Aufbau/Standorte/standorte-node.html"
+date: 2026-07-06
+expires: 2026-12-31
+authority:
+  kind: bamf
+  name: "Bundesamt für Migration und Flüchtlinge (BAMF) – Zentrale"
+  street: "Frankenstraße 210"
+  plz: "90461"
+  city: "Nürnberg"
+  web: "https://www.bamf.de"
+competences:
+  - { kind: bamf, level: land, area: "01", rank: 0 }
+  - { kind: bamf, level: land, area: "02", rank: 0 }
+  - { kind: bamf, level: land, area: "03", rank: 0 }
+  - { kind: bamf, level: land, area: "04", rank: 0 }
+  - { kind: bamf, level: land, area: "05", rank: 0 }
+  - { kind: bamf, level: land, area: "06", rank: 0 }
+  - { kind: bamf, level: land, area: "07", rank: 0 }
+  - { kind: bamf, level: land, area: "08", rank: 0 }
+  - { kind: bamf, level: land, area: "09", rank: 0 }
+  - { kind: bamf, level: land, area: "10", rank: 0 }
+  - { kind: bamf, level: land, area: "11", rank: 0 }
+  - { kind: bamf, level: land, area: "12", rank: 0 }
+  - { kind: bamf, level: land, area: "13", rank: 0 }
+  - { kind: bamf, level: land, area: "14", rank: 0 }
+  - { kind: bamf, level: land, area: "15", rank: 0 }
+  - { kind: bamf, level: land, area: "16", rank: 0 }

@@ -1,0 +1,21 @@
+action: add_authority
+reason: >
+  BAMF Außenstelle Bamberg (in der ANKER-Einrichtung Oberfranken) — a
+  regional branch (Außenstelle) of the BAMF headquarters in Nürnberg, added
+  for SNTIQ's Bavaria focus. Applicants are assigned via the Land reception
+  system, not a fixed per-Kreis territory, so a Bayern-wide land-level
+  competence (area '09') at rank 1 models it honestly as a subordinate
+  regional office. Parent relation to the Nürnberg HQ noted but not modelled
+  (override mechanism cannot add authority_edge rows).
+source: "https://www.bamf.de/DE/Behoerde/Aufbau/Standorte/standorte-node.html"
+date: 2026-07-06
+expires: 2026-12-31
+authority:
+  kind: bamf
+  name: "BAMF – Außenstelle Bamberg (ANKER-Einrichtung Oberfranken)"
+  street: "Buchenstraße 4"
+  plz: "96050"
+  city: "Bamberg"
+  web: "https://www.bamf.de"
+competences:
+  - { kind: bamf, level: land, area: "09", rank: 1 }

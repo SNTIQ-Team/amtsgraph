@@ -1,0 +1,21 @@
+action: add_authority
+reason: >
+  BAMF Außenstelle München — a regional branch (Außenstelle) of the BAMF
+  headquarters in Nürnberg, added for SNTIQ's Bavaria focus. As with all
+  Außenstellen, applicants are assigned via the Land reception system rather
+  than a fixed per-Kreis territory, so a Bayern-wide land-level competence
+  (area '09') at rank 1 models it honestly as a subordinate regional office.
+  Parent relation to the Nürnberg HQ noted but not modelled (override
+  mechanism cannot add authority_edge rows).
+source: "https://www.bamf.de/SharedDocs/Struktur/Organisationseinheiten/DE/Standorte/muenchen-liegenschaft-1-as-einheit.html"
+date: 2026-07-06
+expires: 2026-12-31
+authority:
+  kind: bamf
+  name: "BAMF – Außenstelle München"
+  street: "Streitfeldstraße 39"
+  plz: "81673"
+  city: "München"
+  web: "https://www.bamf.de"
+competences:
+  - { kind: bamf, level: land, area: "09", rank: 1 }

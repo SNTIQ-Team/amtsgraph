@@ -1,0 +1,22 @@
+action: add_authority
+reason: >
+  BAMF Außenstelle Zirndorf (in der ANKER-Einrichtung Mittelfranken) — a
+  regional branch (Außenstelle) of the BAMF headquarters in Nürnberg, added
+  for SNTIQ's Bavaria focus. Asylum applicants are distributed to branches
+  via the Land reception system (EASY/Königsteiner Schlüssel), not by a
+  fixed per-Kreis territory, so a Bayern-wide land-level competence (area
+  '09') at rank 1 is the honest modelling: subordinate regional office, not
+  THE local answer. Parent relation to the Nürnberg HQ noted but not
+  modelled (override mechanism cannot add authority_edge rows).
+source: "https://www.bamf.de/SharedDocs/Struktur/Organisationseinheiten/DE/Standorte/zirndorf-anker-einheit.html"
+date: 2026-07-06
+expires: 2026-12-31
+authority:
+  kind: bamf
+  name: "BAMF – Außenstelle Zirndorf (ANKER-Einrichtung Mittelfranken)"
+  street: "Rothenburger Straße 29"
+  plz: "90513"
+  city: "Zirndorf"
+  web: "https://www.bamf.de"
+competences:
+  - { kind: bamf, level: land, area: "09", rank: 1 }

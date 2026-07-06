@@ -118,6 +118,8 @@ INSERT INTO authority_kind VALUES
     ('wohngeldstelle','Wohngeldstelle'),
     ('standesamt','Standesamt'), ('gewerbeamt','Gewerbeamt'),
     ('aufsichtsbehoerde','Aufsichtsbehörde'), ('ministerium','Ministerium'),
+    ('bamf','Bundesamt für Migration und Flüchtlinge (BAMF)'),
+    ('bundespolizei','Bundespolizei'),
     ('justizbehoerde','Sonstige Justizbehörde'), ('sonstige','Sonstige Behörde');
 
 -- NB: not unique per (scheme,value) — a court department (Insolvenzgericht
