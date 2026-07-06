@@ -18,13 +18,17 @@ for legal use an honest warning beats a confident wrong answer.
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 import unicodedata
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "atlas.db"
+# Deployment override: AMTSGRAPH_DB=/path/to/atlas.db (default: repo layout)
+DB_PATH = Path(os.environ.get(
+    "AMTSGRAPH_DB",
+    Path(__file__).resolve().parent.parent / "data" / "atlas.db"))
 app = FastAPI(title="Amtsgraph", version="2.1")
 
 COURT_KINDS = {"amtsgericht", "landgericht", "oberlandesgericht",
@@ -120,28 +124,196 @@ def sources():
 
 # ---------------------------------------------------------------- places
 
+_PLACE_COLS = """g.ags, g.name_simple AS name, g.kind,
+                  k.name AS kreis, l.name AS land,
+                  (SELECT COUNT(*) FROM gemeinde_plz p WHERE p.ags=g.ags) AS plz_count,
+                  (SELECT MIN(plz) FROM gemeinde_plz p WHERE p.ags=g.ags) AS plz"""
+_PLACE_FROM = """FROM gemeinde g
+           JOIN kreis k ON k.ags = g.kreis_ags
+           JOIN land  l ON l.code = k.land_code"""
+
+
 @app.get("/places")
 def search_places(q: str, limit: int = 10):
+    """Place lookup: city name (prefix → substring → fuzzy) or PLZ.
+
+    A digit query searches gemeinde_plz directly and returns the PLZ on
+    each match, so clients can skip the separate PLZ prompt. Fuzzy
+    matching (difflib on normalized names) catches typos like
+    'erdnig' → Erding; results are flagged with fuzzy=True.
+    """
     conn = db()
+    q = q.strip()
+
+    # ---- postal-code search -------------------------------------
+    if q.isdigit() and 3 <= len(q) <= 5:
+        # the outer join alias must NOT be `p` — _PLACE_COLS' correlated
+        # subqueries use `p` internally, and shadowing it silently
+        # decorrelates them (MIN(plz) over ALL of Germany = 01067 Dresden).
+        # Also: show the PLZ that actually matched the query, not MIN().
+        cols = _PLACE_COLS.replace(
+            "(SELECT MIN(plz) FROM gemeinde_plz p WHERE p.ags=g.ags) AS plz",
+            "pq.plz AS plz")
+        rows = conn.execute(
+            f"""SELECT DISTINCT {cols}
+                {_PLACE_FROM}
+                JOIN gemeinde_plz pq ON pq.ags = g.ags
+                WHERE pq.plz LIKE ? || '%'
+                ORDER BY g.population IS NULL, g.population DESC, pq.plz
+                LIMIT ?""",
+            (q, limit)).fetchall()
+        return {"query": q, "matches": [dict(r) for r in rows],
+                "court_register_only": []}
+
     norm = normalize(q)
     rows = conn.execute(
-        """SELECT g.ags, g.name_simple AS name, g.kind,
-                  k.name AS kreis, l.name AS land,
-                  (SELECT COUNT(*) FROM gemeinde_plz p WHERE p.ags=g.ags) AS plz_count
-           FROM gemeinde g
-           JOIN kreis k ON k.ags = g.kreis_ags
-           JOIN land  l ON l.code = k.land_code
-           WHERE g.name_norm LIKE ? || '%'
-           ORDER BY g.population IS NULL, g.population DESC LIMIT ?""",
+        f"""SELECT {_PLACE_COLS} {_PLACE_FROM}
+            WHERE g.name_norm LIKE ? || '%'
+            ORDER BY g.population IS NULL, g.population DESC LIMIT ?""",
         (norm, limit)).fetchall()
-    # court-register places that didn't map to a Gemeinde (rare but real)
+
+    # ---- substring fallback (e.g. 'neustadt' inside 'bad neustadt')
+    if not rows and len(norm) >= 3:
+        rows = conn.execute(
+            f"""SELECT {_PLACE_COLS} {_PLACE_FROM}
+                WHERE g.name_norm LIKE '%' || ? || '%'
+                ORDER BY g.population IS NULL, g.population DESC LIMIT ?""",
+            (norm, limit)).fetchall()
+
+    matches = [dict(r) for r in rows]
+
+    # ---- fuzzy fallback for typos --------------------------------
+    if not matches and len(norm) >= 4:
+        import difflib
+        pool = conn.execute(
+            f"SELECT g.name_norm, {_PLACE_COLS} {_PLACE_FROM}").fetchall()
+        by_norm = {}
+        for r in pool:
+            by_norm.setdefault(r["name_norm"], r)
+        close = difflib.get_close_matches(
+            norm, by_norm.keys(), n=limit, cutoff=0.78)
+        matches = [{**dict(by_norm[n]), "fuzzy": True} for n in close]
+        for m in matches:
+            m.pop("name_norm", None)
+
     extra = conn.execute(
         """SELECT plz, ort, ortk FROM jz_place
            WHERE ort_norm LIKE ? || '%' AND gemeinde_ags IS NULL LIMIT ?""",
         (norm, limit)).fetchall()
-    return {"query": q,
-            "matches": [dict(r) for r in rows],
+    return {"query": q, "matches": matches,
             "court_register_only": [dict(r) for r in extra]}
+
+
+_GRAPH_CACHE: dict | None = None
+
+
+@app.get("/graph")
+def graph():
+    """Full authority graph for visual exploration: every ACTIVE
+    authority that participates in at least one edge, plus all edges.
+    Compact arrays (nodes: [id, kind, name], edges: [a, b, relation]);
+    the dataset is static per deploy, so the response is cached
+    in-process and marked cacheable for clients.
+    """
+    global _GRAPH_CACHE
+    if _GRAPH_CACHE is None:
+        conn = db()
+        edges = conn.execute(
+            """SELECT e.from_authority, e.to_authority, e.relation
+               FROM authority_edge e
+               JOIN authority a ON a.id = e.from_authority AND a.valid_to IS NULL
+               JOIN authority b ON b.id = e.to_authority AND b.valid_to IS NULL
+               """).fetchall()
+        # ALL active authorities, not only edge-connected ones —
+        # otherwise every Land without a harvested department web
+        # (i.e. everything outside Bavaria) loses its Kreise/cities
+        ids = {r["id"] for r in conn.execute(
+            "SELECT id FROM authority WHERE valid_to IS NULL")}
+        # land per authority: from its competence areas, then propagated
+        # across edges so departments inherit their parent's Land
+        land: dict[int, str] = {}
+        for r in conn.execute(
+                """SELECT authority_id,
+                          CASE level WHEN 'land' THEN area
+                               ELSE substr(area, 1, 2) END AS lc
+                   FROM competence WHERE level IN
+                        ('land', 'kreis', 'gemeinde')"""):
+            land.setdefault(r["authority_id"], r["lc"])
+        # courts/prosecutors have no competence rows — derive their
+        # Land from the postal code; justizadressen rows keep the PLZ
+        # inside the street/postal string (plz column is NULL), so
+        # extract it with a regex first
+        import re as _re
+        plz_of: dict[int, str] = {}
+        for r in conn.execute(
+                """SELECT id, plz, street, postal_address
+                   FROM authority WHERE valid_to IS NULL"""):
+            p = r["plz"]
+            if not p:
+                m = _re.search(r"\b(\d{5})\b",
+                               (r["street"] or "") + " " +
+                               (r["postal_address"] or ""))
+                p = m.group(1) if m else None
+            if p:
+                plz_of[r["id"]] = p
+        plz2land: dict[str, str] = {}
+        plz2kreis: dict[str, str] = {}
+        for r in conn.execute(
+                """SELECT gp.plz, MIN(g.ags) AS ags FROM gemeinde_plz gp
+                   JOIN gemeinde g ON g.ags = gp.ags GROUP BY gp.plz"""):
+            plz2land[r["plz"]] = r["ags"][:2]
+            plz2kreis[r["plz"]] = r["ags"][:5]
+        for aid, p in plz_of.items():
+            if p in plz2land:
+                land.setdefault(aid, plz2land[p])
+        for _ in range(6):  # propagate over the shallow trees
+            changed = False
+            for a, b, _rel in edges:
+                if a in land and b not in land:
+                    land[b] = land[a]; changed = True
+                elif b in land and a not in land:
+                    land[a] = land[b]; changed = True
+            if not changed:
+                break
+        # kreis per authority (5-digit ARS prefix) — same recipe
+        kreis: dict[int, str] = {}
+        for r in conn.execute(
+                """SELECT authority_id,
+                          CASE level WHEN 'kreis' THEN area
+                               WHEN 'gemeinde' THEN substr(area, 1, 5)
+                          END AS kc
+                   FROM competence WHERE level IN ('kreis', 'gemeinde')"""):
+            if r["kc"]:
+                kreis.setdefault(r["authority_id"], r["kc"])
+        for aid, p in plz_of.items():
+            if p in plz2kreis:
+                kreis.setdefault(aid, plz2kreis[p])
+        for _ in range(6):
+            changed = False
+            for a, b, _rel in edges:
+                if a in kreis and b not in kreis:
+                    kreis[b] = kreis[a]; changed = True
+                elif b in kreis and a not in kreis:
+                    kreis[a] = kreis[b]; changed = True
+            if not changed:
+                break
+        nodes = []
+        if ids:
+            marks = ",".join("?" * len(ids))
+            for r in conn.execute(
+                    f"""SELECT id, kind, name FROM authority
+                        WHERE id IN ({marks})""", list(ids)):
+                nodes.append([r["id"], r["kind"], r["name"],
+                              land.get(r["id"]), kreis.get(r["id"])])
+        _GRAPH_CACHE = {
+            "nodes": nodes,
+            "edges": [[r[0], r[1], r[2]] for r in edges],
+            "kreise": {r["ags"]: r["name"] for r in
+                       conn.execute("SELECT ags, name FROM kreis")},
+        }
+    from fastapi.responses import JSONResponse
+    return JSONResponse(_GRAPH_CACHE, headers={
+        "Cache-Control": "public, max-age=3600"})
 
 
 @app.get("/matters")
