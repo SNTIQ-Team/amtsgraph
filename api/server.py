@@ -6,6 +6,7 @@ Composition root for every backend service the platform ships:
     /health             liveness + database check (used by uptime monitors)
     /v1/...             Amtsgraph resolver (mounted sub-application)
     /v1/pdf/letter      Briefcraft — stateless DIN-5008 letter rendering
+    /tts/speak          read-aloud fallback — stateless espeak-ng synthesis
 
 Adding a future service
 -----------------------
@@ -31,6 +32,7 @@ from pathlib import Path
 
 from api.main import DB_PATH, app as amtsgraph
 from api.pdf import pdf_letter, router as pdf_router
+from api.tts import router as tts_router
 
 SERVICE_INDEX = {
     "service": "sntiq-api",
@@ -87,6 +89,11 @@ SERVICE_INDEX = {
             "endpoints": ["/pdf/letter"],
             "legacy_prefix": "/v1/pdf",
             "note": "stateless DIN-5008 rendering; nothing stored",
+        },
+        "tts": {
+            "status": "live",
+            "endpoints": ["/tts/speak"],
+            "note": "stateless espeak-ng synthesis; nothing stored",
         },
     },
     "dataset": "https://github.com/SNTIQ-Team/amtsgraph",
@@ -331,6 +338,10 @@ def health():
 # ---- service routers (explicit routes BEFORE the /v1 mount) -------------
 
 server.include_router(pdf_router)
+
+# Read-aloud fallback for the web app. Canonical /tts/speak only — the
+# service never had a /v1 era, so no legacy alias exists.
+server.include_router(tts_router)
 
 # Canonical service-scoped alias for the PDF renderer: POST /pdf/letter.
 # The /v1/pdf/letter route above stays for backward compatibility.
