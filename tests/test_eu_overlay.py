@@ -79,6 +79,40 @@ class EUOverlayTest(unittest.TestCase):
     def test_validation_gate_accepts_overlay(self):
         self.assertEqual([], validate.check(self.db))
 
+    def test_validation_gate_rejects_self_loop(self):
+        authority_id = self.db.execute(
+            "SELECT id FROM authority ORDER BY id LIMIT 1"
+        ).fetchone()[0]
+        self.db.execute(
+            """INSERT INTO authority_edge
+               (from_authority,to_authority,relation,matter,note,delta,
+                trust,source,source_url)
+               VALUES (?,?,'parent',NULL,'invalid',0.0,1.0,
+                       'override',NULL)""",
+            (authority_id, authority_id),
+        )
+        errors = validate.check(self.db)
+        self.assertTrue(
+            any(error.startswith("graph: 1 self-loop authority edge")
+                for error in errors),
+            errors,
+        )
+
+    def test_builder_drops_self_loop_before_validation(self):
+        authority_id = self.db.execute(
+            "SELECT id FROM authority ORDER BY id LIMIT 1"
+        ).fetchone()[0]
+        self.db.execute(
+            """INSERT INTO authority_edge
+               (from_authority,to_authority,relation,matter,note,delta,
+                trust,source,source_url)
+               VALUES (?,?,'parent',NULL,'merge artefact',0.0,1.0,
+                       'override',NULL)""",
+            (authority_id, authority_id),
+        )
+        self.assertEqual(1, build_db.drop_self_loops(self.db))
+        self.assertEqual([], validate.check(self.db))
+
     @unittest.skipUnless(importlib.util.find_spec("fastapi"),
                          "FastAPI optional dependency not installed")
     def test_graph_api_keeps_uniform_edges_and_separate_eu_metadata(self):
@@ -103,6 +137,14 @@ class EUOverlayTest(unittest.TestCase):
                     trust,source,source_url)
                    VALUES (?,?,'parent',NULL,'test',0.45,0.8,
                            'override',NULL)""", (a, b))
+            # A malformed self-parent must not escape the API even if a stale
+            # database predates the validation gate.
+            disk.execute(
+                """INSERT INTO authority_edge
+                   (from_authority,to_authority,relation,matter,note,delta,
+                    trust,source,source_url)
+                   VALUES (?,?,'parent',NULL,'invalid',0.0,1.0,
+                           'override',NULL)""", (a, a))
             disk.commit()
             disk.close()
 
@@ -110,6 +152,10 @@ class EUOverlayTest(unittest.TestCase):
             api_main.DB_PATH = path
             api_main._GRAPH_CACHE = None
             payload = json.loads(api_main.graph().body)
+            self.assertFalse(
+                any(edge[0] == edge[1] for edge in payload["edges"]),
+                payload["edges"],
+            )
             german = next(e for e in payload["edges"] if e[2] == "parent")
             eu = next(e for e in payload["edges"]
                       if e[2] == "sectoral_oversight")

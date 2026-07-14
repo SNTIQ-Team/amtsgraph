@@ -1007,6 +1007,25 @@ def apply_overrides(db: sqlite3.Connection):
         print(f"  override {f.name}: applied to authority {aid}")
 
 
+def drop_self_loops(db: sqlite3.Connection) -> int:
+    """Remove malformed edges before validation and serialization.
+
+    Cross-source identity merges can turn a previously valid edge between two
+    duplicate records into ``id -> id``. Keep the validation gate as a hard
+    backstop, but normalize this known merge artefact in the builder itself.
+    """
+    n = db.execute(
+        "SELECT COUNT(*) FROM authority_edge "
+        "WHERE from_authority=to_authority"
+    ).fetchone()[0]
+    if n:
+        db.execute(
+            "DELETE FROM authority_edge WHERE from_authority=to_authority"
+        )
+        print(f"graph: removed {n} self-loop authority edges")
+    return n
+
+
 # -------------------------------------------------------------------- main
 
 def main() -> int:
@@ -1035,6 +1054,7 @@ def main() -> int:
     snaps["eu_curated"] = load_eu_overlay(db)
 
     apply_overrides(db)
+    drop_self_loops(db)
     db.execute("INSERT OR REPLACE INTO build_info VALUES ('built_at', ?)", (now(),))
     db.execute("INSERT OR REPLACE INTO build_info VALUES ('snapshots', ?)",
                (json.dumps(snaps),))

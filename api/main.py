@@ -229,6 +229,7 @@ def graph():
                FROM authority_edge e
                JOIN authority a ON a.id = e.from_authority AND a.valid_to IS NULL
                JOIN authority b ON b.id = e.to_authority AND b.valid_to IS NULL
+               WHERE e.from_authority <> e.to_authority
                """).fetchall()
         # ALL active authorities, not only edge-connected ones —
         # otherwise every Land without a harvested department web

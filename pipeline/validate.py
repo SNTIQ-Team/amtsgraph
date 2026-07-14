@@ -122,6 +122,21 @@ def check(db: sqlite3.Connection) -> list[str]:
                 errors.append(f"[{kind}] {len(rows)} Gemeinden with >1 "
                               f"authority, e.g. {rows[:3]}")
 
+    # ---- graph integrity -----------------------------------------------
+    # A self-parent is especially destructive for the visual tree: the node
+    # becomes its own child and its complete organisational subtree is no
+    # longer reachable from the root. The API and client also filter these as
+    # defence in depth, but a freshly built database must never contain one.
+    rows = q(db, """SELECT e.from_authority, e.relation, a.name
+                     FROM authority_edge e
+                     JOIN authority a ON a.id=e.from_authority
+                     WHERE e.from_authority=e.to_authority
+                     LIMIT 5""")
+    if rows:
+        n = q(db, """SELECT COUNT(*) FROM authority_edge
+                      WHERE from_authority=to_authority""")[0][0]
+        errors.append(f"graph: {n} self-loop authority edges, e.g. {rows}")
+
     # ---- curated EU institutional overlay ------------------------------
     # The overlay is a deliberately separate institutional island.  It must
     # never turn EU competences into a made-up direct supervisory chain over
