@@ -112,10 +112,13 @@ def tts_speak(payload: SpeakPayload) -> Response:
 
     audio, media_type = proc.stdout, "audio/wav"
     if _OPUSENC:
-        # WAV -> ogg/opus (~15x smaller); on any failure ship the WAV
+        # WAV -> ogg/opus (~15x smaller); on any failure ship the WAV.
+        # --complexity 3: default 10 costs seconds of CPU on this 2-vCPU
+        # host for minutes-long speech; 3 is transparent for espeak audio.
         try:
             enc = subprocess.run(
-                [_OPUSENC, "--quiet", "--bitrate", "24", "-", "-"],
+                [_OPUSENC, "--quiet", "--bitrate", "24",
+                 "--complexity", "3", "-", "-"],
                 input=audio, capture_output=True, timeout=_TIMEOUT_S)
             if enc.returncode == 0 and enc.stdout:
                 audio, media_type = enc.stdout, "audio/ogg"
