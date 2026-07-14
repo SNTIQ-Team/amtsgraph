@@ -18,12 +18,16 @@ for legal use an honest warning beats a confident wrong answer.
 """
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
+import threading
 import unicodedata
+from functools import wraps
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response
 
 # Deployment override: AMTSGRAPH_DB=/path/to/atlas.db (default: repo layout)
 DB_PATH = Path(os.environ.get(
@@ -209,9 +213,30 @@ def search_places(q: str, limit: int = 10):
 
 
 _GRAPH_CACHE: dict | None = None
+_GRAPH_JSON: bytes | None = None
+_GRAPH_LOCK = threading.Lock()
+
+
+def _serialized(lock: threading.Lock):
+    """Serialize an expensive sync endpoint, preserving FastAPI's signature.
+
+    Uvicorn runs sync handlers in a thread pool.  Without this guard, a burst
+    of cold-cache ``/graph`` requests can make every worker construct and JSON
+    encode the multi-megabyte graph simultaneously — enough to exhaust the
+    1 GB production host during boot.  Returning pre-encoded bytes also avoids
+    a fresh large allocation for every cached response.
+    """
+    def decorate(func):
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            with lock:
+                return func(*args, **kwargs)
+        return wrapped
+    return decorate
 
 
 @app.get("/graph")
+@_serialized(_GRAPH_LOCK)
 def graph():
     """Full authority graph for visual exploration: every ACTIVE
     authority plus every edge whose endpoints are active.
@@ -220,7 +245,7 @@ def graph():
     the dataset is static per deploy, so the response is cached
     in-process and marked cacheable for clients.
     """
-    global _GRAPH_CACHE
+    global _GRAPH_CACHE, _GRAPH_JSON
     if _GRAPH_CACHE is None:
         conn = db()
         edges = conn.execute(
@@ -331,8 +356,10 @@ def graph():
             "kreise": {r["ags"]: r["name"] for r in
                        conn.execute("SELECT ags, name FROM kreis")},
         }
-    from fastapi.responses import JSONResponse
-    return JSONResponse(_GRAPH_CACHE, headers={
+        _GRAPH_JSON = json.dumps(
+            _GRAPH_CACHE, ensure_ascii=False,
+            separators=(",", ":")).encode("utf-8")
+    return Response(_GRAPH_JSON, media_type="application/json", headers={
         "Cache-Control": "public, max-age=3600"})
 
 

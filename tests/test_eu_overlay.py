@@ -6,9 +6,11 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "pipeline"))
 
 import build_db  # noqa: E402
@@ -151,7 +153,25 @@ class EUOverlayTest(unittest.TestCase):
             from api import main as api_main
             api_main.DB_PATH = path
             api_main._GRAPH_CACHE = None
-            payload = json.loads(api_main.graph().body)
+            api_main._GRAPH_JSON = None
+            original_db = api_main.db
+            build_calls = 0
+
+            def counted_db():
+                nonlocal build_calls
+                build_calls += 1
+                return original_db()
+
+            api_main.db = counted_db
+            try:
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    bodies = list(pool.map(lambda _: api_main.graph().body,
+                                           range(16)))
+            finally:
+                api_main.db = original_db
+            self.assertEqual(1, build_calls)
+            self.assertTrue(all(body == bodies[0] for body in bodies))
+            payload = json.loads(bodies[0])
             self.assertFalse(
                 any(edge[0] == edge[1] for edge in payload["edges"]),
                 payload["edges"],
