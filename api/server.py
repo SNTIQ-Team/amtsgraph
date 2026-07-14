@@ -216,9 +216,9 @@ INDEX_HTML = """<!doctype html>
     <article class="card">
       <div class="status"><span class="dot"></span>live</div>
       <h2>Amtsgraph</h2>
-      <p class="tagline">German public authorities &amp; court competences</p>
-      <p class="desc">19,227 authorities, 338,873 court-chain links,
-        matter-aware competence resolution.</p>
+      <p class="tagline">German authorities, court competences &amp; EU institutions</p>
+      <p class="desc">19,238 active nodes, 338,873 court-chain links,
+        11 sourced EU institutions/bodies/courts and matter-aware resolution.</p>
       <ul class="endpoints mono">
         <li>/amtsgraph/resolve/court</li>
         <li>/amtsgraph/resolve/authority</li>
@@ -236,8 +236,8 @@ INDEX_HTML = """<!doctype html>
       <h2>Lexgraph</h2>
       <p class="tagline">German &amp; EU legislation as event-sourced git</p>
       <p class="desc">Laws as repositories, amendments as commits, court
-        decisions linked to the norms they affect. WP21: 358 procedures,
-        1,467 patch instructions.</p>
+        decisions linked to the norms they affect. 51 federal acts,
+        1,484 patch instructions and 7,934 in-force EU instruments indexed.</p>
       <ul class="endpoints mono">
         <li>/lex/acts</li>
         <li>/lex/git</li>

@@ -23,16 +23,22 @@ location?* It covers:
   Fachbereich and Sachgebiet of all 96 Kreisverwaltungsbehörden as a
   navigable parent/child graph, down to department-level contacts
   (`asyl@landratsamt-roth.de` instead of a generic switchboard).
+- **EU institutional layer** — the seven institutions named in Article 13
+  TEU, both courts of the CJEU, the European Ombudsman and the EDPS.  Its
+  31 relations distinguish composition, appeal, judicial review,
+  co-legislation, reporting, financial audit, maladministration review and
+  data-protection oversight.  It contains **no EU→German blanket-supervision
+  edge**; every relation carries an official source and a limiting note.
 
 | | |
 |---|---|
-| Active authorities | **19,226** |
+| Active authorities | **19,238** (including 11 curated EU nodes) |
 | Court-chain links (place × matter × instance) | **338,873** |
-| Competence assignments | **77,454** |
+| Competence assignments | **77,125** |
 | Organisational parent edges (Bavaria) | **7,195** |
-| Derived appeal edges (cross-checked) | **1,065** |
+| Derived appeal edges (cross-checked) | **1,066** |
 | Municipalities / postal codes covered | **10,950 / 8,205** |
-| Honest-gap caveats served with answers | **5,359** |
+| Honest-gap caveats served with answers | **5,385** |
 
 ## Why this dataset is different
 
@@ -73,7 +79,7 @@ land                  authority                               court_chain
          │    │           │           │                       instance chains,
 gemeinde_plz  │       competence   authority_edge             served verbatim —
    (M:N)      │       kind × area  parent / appeal /          the edge graph is
-         │    │         × rank     supervision / successor    derived and
+         │    │         × rank     typed + sourced legal       derived and
         plz   │                    (δ directionality          cross-checked,
          │    │                     + trust)                  never the answer
      jz_place ┘
@@ -93,6 +99,13 @@ Key invariants (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)):
   Landratsamt legitimately wears the ABH, Sozialamt and AsylbLG hats.
 - `competence.rank`: `0` = the office to apply at, `1` = übergeordnete /
   supervisory body (also linked via `authority_edge: supervision`).
+- EU graph edges are not a general chain of command.  `judicial_review`,
+  `maladministration_review`, `financial_audit` and `sectoral_oversight`
+  mean only the procedure/domain stated in their `note` and `source_url`.
+  CJEU rulings can bind German courts or the Member State in treaty-defined
+  preliminary-ruling and infringement procedures; that effect is not an
+  appeal from a German judgment, so Amtsgraph does not encode a blanket
+  CJEU→German-court supervision edge.
 
 ## Quickstart
 

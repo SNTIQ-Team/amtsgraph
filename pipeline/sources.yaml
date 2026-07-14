@@ -3,6 +3,16 @@
 # to data/snapshots/<id>/<YYYY-MM-DD>/ before staging.
 
 sources:
+  eu_curated:
+    fetcher: null
+    cadence: on_treaty_or_institutional_change
+    url: https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:12016M013
+    notes: >
+      Reviewed EU institutional overlay in eu_institutions.yaml. Every edge
+      cites EU primary law or an official EU institution page. No EU-to-German
+      blanket-supervision relations are modelled; Article 267 preliminary-
+      ruling effects are documented as a procedure, not an appeal edge.
+
   destatis_gv:
     fetcher: fetch_destatis.py
     cadence: quarterly

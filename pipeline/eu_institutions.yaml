@@ -1,0 +1,414 @@
+meta:
+  verified_at: "2026-07-14"
+  scope: >
+    Curated institutional map of the seven institutions named in Article 13
+    TEU, the two courts which form the CJEU, and two independent EU bodies.
+    It deliberately creates no edge to a German authority: EU competences,
+    judicial remedies and national implementation are procedure-specific and
+    must not be presented as a blanket supervisory hierarchy. CJEU rulings
+    may bind a national court or Member State in treaty-defined procedures,
+    but a preliminary ruling is judicial cooperation rather than an appeal
+    from the national judgment; that class-level procedure is documented
+    instead of being guessed as thousands of authority-to-authority edges.
+  legal_basis: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016M013
+  procedural_basis: https://eur-lex.europa.eu/eli/treaty/tfeu_2012/art_267/oj/deu
+
+authorities:
+  - key: parliament
+    external_id: EP
+    kind: eu_institution
+    name: Europäisches Parlament
+    city: Brüssel / Straßburg / Luxemburg
+    web: https://www.europarl.europa.eu/portal/de
+    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+
+  - key: european_council
+    external_id: EUCO
+    kind: eu_institution
+    name: Europäischer Rat
+    city: Brüssel
+    web: https://www.consilium.europa.eu/de/european-council/
+    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+
+  - key: council
+    external_id: CONSIL
+    kind: eu_institution
+    name: Rat der Europäischen Union
+    city: Brüssel / Luxemburg
+    web: https://www.consilium.europa.eu/de/council-eu/
+    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+
+  - key: commission
+    external_id: COM
+    kind: eu_institution
+    name: Europäische Kommission
+    city: Brüssel / Luxemburg
+    web: https://commission.europa.eu/index_de
+    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+
+  - key: cjeu
+    external_id: CJEU
+    kind: eu_institution
+    name: Gerichtshof der Europäischen Union
+    city: Luxemburg
+    web: https://curia.europa.eu/site/
+    source_url: https://curia.europa.eu/site/jcms/d2_5390/de/ueber-den-gerichtshof-der-europaeischen-union
+
+  - key: court_of_justice
+    external_id: CJEU-CJ
+    kind: eu_court
+    name: Gerichtshof
+    city: Luxemburg
+    web: https://curia.europa.eu/site/
+    source_url: https://curia.europa.eu/site/jcms/d2_5391/de/ueber-den-gerichtshof
+
+  - key: general_court
+    external_id: CJEU-GC
+    kind: eu_court
+    name: Gericht der Europäischen Union
+    city: Luxemburg
+    web: https://curia.europa.eu/site/
+    source_url: https://curia.europa.eu/site/jcms/d2_5393/de/ueber-das-gericht
+
+  - key: ecb
+    external_id: ECB
+    kind: eu_institution
+    name: Europäische Zentralbank
+    city: Frankfurt am Main
+    web: https://www.ecb.europa.eu/home/html/index.de.html
+    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+
+  - key: eca
+    external_id: ECA
+    kind: eu_institution
+    name: Europäischer Rechnungshof
+    city: Luxemburg
+    web: https://www.eca.europa.eu/de/
+    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+
+  - key: ombudsman
+    external_id: EO
+    kind: eu_body
+    name: Europäische Bürgerbeauftragte
+    city: Straßburg
+    web: https://www.ombudsman.europa.eu/de/home
+    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+
+  - key: edps
+    external_id: EDPS
+    kind: eu_body
+    name: Europäischer Datenschutzbeauftragter
+    city: Brüssel
+    web: https://www.edps.europa.eu/_de
+    source_url: https://www.edps.europa.eu/data-protection/our-role-supervisor_de
+
+edges:
+  # The CJEU is one Article 13 institution composed of two distinct courts.
+  - from: court_of_justice
+    to: cjeu
+    relation: institutional_part
+    note: >
+      Einer der beiden Gerichte des Gerichtshofs der Europäischen Union;
+      institutionelle Zugehörigkeit, keine Aufsichtskette.
+    delta: 0.45
+    trust: 0.99
+    source_url: https://curia.europa.eu/site/jcms/d2_5390/de/ueber-den-gerichtshof-der-europaeischen-union
+
+  - from: general_court
+    to: cjeu
+    relation: institutional_part
+    note: >
+      Einer der beiden Gerichte des Gerichtshofs der Europäischen Union;
+      institutionelle Zugehörigkeit, keine Aufsichtskette.
+    delta: 0.45
+    trust: 0.99
+    source_url: https://curia.europa.eu/site/jcms/d2_5390/de/ueber-den-gerichtshof-der-europaeischen-union
+
+  - from: general_court
+    to: court_of_justice
+    relation: appeal
+    note: >
+      Rechtsmittel gegen Entscheidungen des Gerichts gehen nur nach Maßgabe
+      der Verträge, der Satzung und der Verfahrensordnung an den Gerichtshof;
+      grundsätzlich auf Rechtsfragen beschränkt, teils mit Zulassungsverfahren.
+    delta: 1.0
+    trust: 0.99
+    source_url: https://curia.europa.eu/site/jcms/d2_5391/de/ueber-den-gerichtshof
+
+  # Article 17(8) TEU: collective political responsibility, not an
+  # administrative parent/supervisor relationship.
+  - from: commission
+    to: parliament
+    relation: political_accountability
+    note: >
+      Die Kommission ist als Kollegium dem Europäischen Parlament politisch
+      verantwortlich (Art. 17 Abs. 8 EUV); keine Verwaltungsaufsicht über
+      einzelne Kommissionsdienststellen wird daraus modelliert.
+    delta: 0.70
+    trust: 0.99
+    source_url: https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:12016M017
+
+  # Ordinary legislative procedure: co-legislators, neither is above the other.
+  - from: parliament
+    to: council
+    relation: co_legislation
+    note: >
+      Parlament und Rat beschließen im ordentlichen Gesetzgebungsverfahren
+      gemeinsam; die symmetrische Kante bezeichnet keine Hierarchie.
+    delta: 0.0
+    trust: 0.98
+    source_url: https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:12016E294
+
+  # Democratic-accountability channel under Article 284(3) TFEU. The ECB's
+  # treaty independence (Article 130 TFEU) remains intact.
+  - from: ecb
+    to: parliament
+    relation: reporting_accountability
+    note: >
+      Bericht, Aussprache und Anhörungen nach Art. 284 Abs. 3 AEUV; die
+      Unabhängigkeit der EZB nach Art. 130 AEUV bleibt unberührt, daher keine
+      Weisungs- oder Aufsichtskante.
+    delta: 0.55
+    trust: 0.99
+    source_url: https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:12016E284
+
+  # The Court of Auditors reports support the discharge procedure; neither
+  # recipient is the Court's hierarchical superior.
+  - from: eca
+    to: parliament
+    relation: reporting_accountability
+    note: >
+      Der Rechnungshof übermittelt Prüfungs- und Jahresberichte, die unter
+      anderem der Haushaltsentlastung dienen; keine hierarchische Aufsicht.
+    delta: 0.55
+    trust: 0.98
+    source_url: https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:12016E287
+
+  - from: eca
+    to: council
+    relation: reporting_accountability
+    note: >
+      Der Rechnungshof übermittelt Prüfungs- und Jahresberichte an Rat und
+      Parlament; die Berichtslinie begründet keine hierarchische Aufsicht.
+    delta: 0.55
+    trust: 0.98
+    source_url: https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:12016E287
+
+  # The Ombudsman is elected by Parliament but performs duties independently.
+  - from: ombudsman
+    to: parliament
+    relation: reporting_accountability
+    note: >
+      Wahl und jährliche Berichterstattung nach Art. 228 AEUV; die
+      Bürgerbeauftragte übt ihr Amt unabhängig aus und unterliegt keiner
+      hierarchischen Aufsicht des Parlaments.
+    delta: 0.55
+    trust: 0.99
+    source_url: https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:12016E228
+
+  # The Court of Auditors audits EU revenue/expenditure and financial
+  # management. This is a financial-control relationship, not command over
+  # the Commission's general administrative work.
+  - from: commission
+    to: eca
+    relation: financial_audit
+    note: >
+      Prüfung der EU-Rechnungsführung sowie der Recht- und Ordnungsmäßigkeit
+      von Einnahmen und Ausgaben nach Art. 287 AEUV; auf Finanzkontrolle
+      begrenzt und keine allgemeine Verwaltungsaufsicht.
+    delta: 0.75
+    trust: 0.99
+    source_url: https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:12016E287
+
+  # Ombudsman review concerns maladministration in EU institutions and
+  # bodies. It is neither a judicial appeal nor oversight of German offices.
+  - from: parliament
+    to: ombudsman
+    relation: maladministration_review
+    note: &ombudsman_note >
+      Prüfung möglicher Missstände in der Verwaltungstätigkeit von
+      EU-Organen und -Einrichtungen nach Art. 228 AEUV; kein gerichtliches
+      Rechtsmittel, keine allgemeine Hierarchie und keine Zuständigkeit für
+      deutsche Behörden.
+    delta: 0.70
+    trust: 0.98
+    source_url: &ombudsman_source https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:12016E228
+
+  - from: european_council
+    to: ombudsman
+    relation: maladministration_review
+    note: *ombudsman_note
+    delta: 0.70
+    trust: 0.98
+    source_url: *ombudsman_source
+
+  - from: council
+    to: ombudsman
+    relation: maladministration_review
+    note: *ombudsman_note
+    delta: 0.70
+    trust: 0.98
+    source_url: *ombudsman_source
+
+  - from: commission
+    to: ombudsman
+    relation: maladministration_review
+    note: *ombudsman_note
+    delta: 0.70
+    trust: 0.98
+    source_url: *ombudsman_source
+
+  - from: ecb
+    to: ombudsman
+    relation: maladministration_review
+    note: *ombudsman_note
+    delta: 0.70
+    trust: 0.98
+    source_url: *ombudsman_source
+
+  - from: eca
+    to: ombudsman
+    relation: maladministration_review
+    note: *ombudsman_note
+    delta: 0.70
+    trust: 0.98
+    source_url: *ombudsman_source
+
+  - from: edps
+    to: ombudsman
+    relation: maladministration_review
+    note: *ombudsman_note
+    delta: 0.70
+    trust: 0.98
+    source_url: *ombudsman_source
+
+  - from: cjeu
+    to: ombudsman
+    relation: maladministration_review
+    note: >
+      Prüfung möglicher Missstände in der Verwaltungstätigkeit des
+      Unionsorgans nach Art. 228 AEUV; die rechtsprechende Tätigkeit der
+      Unionsgerichte ist ausgenommen. Kein Rechtsmittel und keine
+      Zuständigkeit für deutsche Behörden.
+    delta: 0.70
+    trust: 0.98
+    source_url: *ombudsman_source
+
+  # Judicial review is treaty- and procedure-specific. Pointing to the CJEU
+  # institution avoids falsely assigning every action to one of its courts.
+  - from: parliament
+    to: cjeu
+    relation: judicial_review
+    note: &judicial_review_note >
+      Gerichtliche Kontrolle nur im Rahmen der vertraglich und
+      verfahrensrechtlich bestimmten Zuständigkeiten der Unionsgerichte
+      (insbesondere Art. 263 AEUV); keine allgemeine Verwaltungsaufsicht.
+    delta: 1.0
+    trust: 0.99
+    source_url: &judicial_review_source https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:12016E263
+
+  - from: european_council
+    to: cjeu
+    relation: judicial_review
+    note: *judicial_review_note
+    delta: 1.0
+    trust: 0.99
+    source_url: *judicial_review_source
+
+  - from: council
+    to: cjeu
+    relation: judicial_review
+    note: *judicial_review_note
+    delta: 1.0
+    trust: 0.99
+    source_url: *judicial_review_source
+
+  - from: commission
+    to: cjeu
+    relation: judicial_review
+    note: *judicial_review_note
+    delta: 1.0
+    trust: 0.99
+    source_url: *judicial_review_source
+
+  - from: ecb
+    to: cjeu
+    relation: judicial_review
+    note: *judicial_review_note
+    delta: 1.0
+    trust: 0.99
+    source_url: *judicial_review_source
+
+  # EDPS supervision is real but strictly sectoral: EU bodies' processing of
+  # personal data, not national German authorities. The CJEU judicial-capacity
+  # exception is stated explicitly on that edge.
+  - from: parliament
+    to: edps
+    relation: sectoral_oversight
+    note: &edps_note >
+      Datenschutzaufsicht nur über die Verarbeitung personenbezogener Daten
+      durch EU-Organe und -Einrichtungen nach Verordnung (EU) 2018/1725;
+      keine Zuständigkeit für deutsche Behörden und keine allgemeine Aufsicht.
+    delta: 0.85
+    trust: 0.98
+    source_url: &edps_source https://www.edps.europa.eu/data-protection/our-role-supervisor_de
+
+  - from: european_council
+    to: edps
+    relation: sectoral_oversight
+    note: *edps_note
+    delta: 0.85
+    trust: 0.98
+    source_url: *edps_source
+
+  - from: council
+    to: edps
+    relation: sectoral_oversight
+    note: *edps_note
+    delta: 0.85
+    trust: 0.98
+    source_url: *edps_source
+
+  - from: commission
+    to: edps
+    relation: sectoral_oversight
+    note: *edps_note
+    delta: 0.85
+    trust: 0.98
+    source_url: *edps_source
+
+  - from: ecb
+    to: edps
+    relation: sectoral_oversight
+    note: *edps_note
+    delta: 0.85
+    trust: 0.98
+    source_url: *edps_source
+
+  - from: eca
+    to: edps
+    relation: sectoral_oversight
+    note: *edps_note
+    delta: 0.85
+    trust: 0.98
+    source_url: *edps_source
+
+  - from: ombudsman
+    to: edps
+    relation: sectoral_oversight
+    note: *edps_note
+    delta: 0.85
+    trust: 0.98
+    source_url: *edps_source
+
+  - from: cjeu
+    to: edps
+    relation: sectoral_oversight
+    note: >
+      Datenschutzaufsicht über die Verarbeitung personenbezogener Daten durch
+      das Unionsorgan nach Verordnung (EU) 2018/1725, jedoch nicht über die
+      Verarbeitung durch die Unionsgerichte in ihrer justiziellen Tätigkeit;
+      keine Zuständigkeit für deutsche Behörden.
+    delta: 0.85
+    trust: 0.98
+    source_url: https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:32018R1725

@@ -74,6 +74,11 @@ def main() -> int:
             "competences": q1(db, "SELECT COUNT(*) FROM competence"),
             "parent_edges": q1(db, "SELECT COUNT(*) FROM authority_edge "
                                    "WHERE relation='parent'"),
+            "eu_authorities": q1(db, "SELECT COUNT(*) FROM authority "
+                                     "WHERE valid_to IS NULL "
+                                     "AND kind LIKE 'eu_%'"),
+            "eu_edges": q1(db, "SELECT COUNT(*) FROM authority_edge "
+                               "WHERE source='eu_curated'"),
             "caveats": q1(db, "SELECT COUNT(*) FROM caveat"),
         },
         "court_coverage_by_core_matter": per_matter,

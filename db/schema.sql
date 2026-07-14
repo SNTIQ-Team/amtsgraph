@@ -120,6 +120,9 @@ INSERT INTO authority_kind VALUES
     ('aufsichtsbehoerde','Aufsichtsbehörde'), ('ministerium','Ministerium'),
     ('bamf','Bundesamt für Migration und Flüchtlinge (BAMF)'),
     ('bundespolizei','Bundespolizei'),
+    ('eu_institution','Organ der Europäischen Union'),
+    ('eu_body','Einrichtung der Europäischen Union'),
+    ('eu_court','Gericht der Europäischen Union'),
     ('justizbehoerde','Sonstige Justizbehörde'), ('sonstige','Sonstige Behörde');
 
 -- NB: not unique per (scheme,value) — a court department (Insolvenzgericht
@@ -191,13 +194,25 @@ CREATE TABLE authority_edge (
     from_authority INTEGER NOT NULL REFERENCES authority(id),
     to_authority   INTEGER NOT NULL REFERENCES authority(id),
     relation    TEXT NOT NULL CHECK (relation IN
-                  ('appeal','supervision','parent','successor')),
+                  ('appeal','supervision','parent','successor',
+                   'institutional_part','political_accountability',
+                   'judicial_review','cooperation','co_legislation',
+                   'reporting_accountability','financial_audit',
+                   'maladministration_review','sectoral_oversight')),
     matter      TEXT REFERENCES matter(code),    -- appeal edges are matter-specific
     note        TEXT,
     delta       REAL NOT NULL DEFAULT 1.0,
     trust       REAL NOT NULL DEFAULT 0.8,
+    source      TEXT,                       -- provenance of the relation itself
+    source_url  TEXT,
     PRIMARY KEY (from_authority, to_authority, relation, matter)
 );
+-- SQLite treats NULL values as distinct even inside a composite UNIQUE/PK,
+-- while most non-matter relations deliberately use matter=NULL.  Close that
+-- hole explicitly so repeated loaders cannot create duplicate graph edges.
+CREATE UNIQUE INDEX authority_edge_identity
+    ON authority_edge(from_authority, to_authority, relation,
+                      COALESCE(matter, ''));
 
 -- provenance confidence per source, used to seed edge/record trust
 CREATE TABLE source_trust (
@@ -211,6 +226,7 @@ INSERT INTO source_trust VALUES
     ('ba',             0.95, 'official BA SGB-II Traeger register'),
     ('pvog',           0.75, 'federal aggregate of Land editorial systems; quality varies by Land'),
     ('destatis',       0.98, 'official municipal register'),
+    ('eu_curated',     0.98, 'curated from EU primary law and official EU institution pages'),
     ('override',       0.85, 'manually verified correction with documented source');
 
 -- QFS-style hyperedge view: a court chain (place x matter) is one

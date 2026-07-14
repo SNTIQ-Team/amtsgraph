@@ -2,6 +2,27 @@
 
 Every endpoint below was tested live on 2026-06-10 unless noted.
 
+## 0. EU institutional overlay — primary law + official institution pages
+
+`pipeline/eu_institutions.yaml` is a small reviewed overlay, verified
+2026-07-14.  Article 13 TEU supplies the seven-institution set; official
+CURIA pages distinguish the CJEU institution from its two courts.  Each
+relation cites the applicable Treaty provision or official specialist page
+(including EDPS Regulation (EU) 2018/1725 scope).  The loader accepts only
+HTTPS `europa.eu` provenance and rejects generic EU `supervision` edges.
+
+- Article 13 TEU: https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:12016M013
+- Preliminary rulings, Article 267 TFEU: https://eur-lex.europa.eu/eli/treaty/tfeu_2012/art_267/oj/deu
+- CJEU structure: https://curia.europa.eu/site/jcms/d2_5390/de/ueber-den-gerichtshof-der-europaeischen-union
+- EU institution overview: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+- EDPS supervisory scope: https://www.edps.europa.eu/data-protection/our-role-supervisor_de
+
+This layer is institutional orientation, not a competence resolver: it
+creates no blanket supervisory relation from an EU body to a German office.
+Treaty-defined preliminary rulings may bind the referring German court on
+the EU-law question, while that court keeps and decides the national case;
+the effect is documented rather than mislabelled as an appeal chain.
+
 ## 1. PVOG Suchdienst API — authorities & competences (the big one)
 
 Official Portalverbund Online-Gateway search service (FITKO). Aggregates the

@@ -29,7 +29,7 @@ from fastapi import FastAPI, HTTPException
 DB_PATH = Path(os.environ.get(
     "AMTSGRAPH_DB",
     Path(__file__).resolve().parent.parent / "data" / "atlas.db"))
-app = FastAPI(title="Amtsgraph", version="2.1")
+app = FastAPI(title="Amtsgraph", version="2.2")
 
 COURT_KINDS = {"amtsgericht", "landgericht", "oberlandesgericht",
                "sozialgericht", "verwaltungsgericht", "arbeitsgericht",
@@ -108,6 +108,10 @@ def stats():
         "competences": one("SELECT COUNT(*) FROM competence"),
         "parent_edges": one("SELECT COUNT(*) FROM authority_edge "
                             "WHERE relation='parent'"),
+        "eu_authorities": one("SELECT COUNT(*) FROM authority "
+                              "WHERE valid_to IS NULL AND kind LIKE 'eu_%'"),
+        "eu_edges": one("SELECT COUNT(*) FROM authority_edge "
+                        "WHERE source='eu_curated'"),
         "caveats": one("SELECT COUNT(*) FROM caveat"),
     }
 
@@ -210,8 +214,9 @@ _GRAPH_CACHE: dict | None = None
 @app.get("/graph")
 def graph():
     """Full authority graph for visual exploration: every ACTIVE
-    authority that participates in at least one edge, plus all edges.
+    authority plus every edge whose endpoints are active.
     Compact arrays (nodes: [id, kind, name], edges: [a, b, relation]);
+    sparse EU relation notes/provenance live in ``edge_meta``.
     the dataset is static per deploy, so the response is cached
     in-process and marked cacheable for clients.
     """
@@ -219,7 +224,8 @@ def graph():
     if _GRAPH_CACHE is None:
         conn = db()
         edges = conn.execute(
-            """SELECT e.from_authority, e.to_authority, e.relation
+            """SELECT e.from_authority, e.to_authority, e.relation,
+                      e.matter, e.note, e.source, e.source_url
                FROM authority_edge e
                JOIN authority a ON a.id = e.from_authority AND a.valid_to IS NULL
                JOIN authority b ON b.id = e.to_authority AND b.valid_to IS NULL
@@ -268,7 +274,8 @@ def graph():
                 land.setdefault(aid, plz2land[p])
         for _ in range(6):  # propagate over the shallow trees
             changed = False
-            for a, b, _rel in edges:
+            for edge in edges:
+                a, b = edge[0], edge[1]
                 if a in land and b not in land:
                     land[b] = land[a]; changed = True
                 elif b in land and a not in land:
@@ -290,7 +297,8 @@ def graph():
                 kreis.setdefault(aid, plz2kreis[p])
         for _ in range(6):
             changed = False
-            for a, b, _rel in edges:
+            for edge in edges:
+                a, b = edge[0], edge[1]
                 if a in kreis and b not in kreis:
                     kreis[b] = kreis[a]; changed = True
                 elif b in kreis and a not in kreis:
@@ -307,7 +315,18 @@ def graph():
                               land.get(r["id"]), kreis.get(r["id"])])
         _GRAPH_CACHE = {
             "nodes": nodes,
+            # Keep the original tuple contract uniform: older clients often
+            # destructure every row as exactly ``for a, b, relation in``.
             "edges": [[r[0], r[1], r[2]] for r in edges],
+            # Rich legal scope is sparse (the reviewed EU overlay only), so
+            # publish it separately instead of changing the tuple shape or
+            # repeating nulls across thousands of German edges.
+            "edge_meta": [
+                {"from": r[0], "to": r[1], "relation": r[2],
+                 "matter": r[3], "note": r[4], "source": r[5],
+                 "source_url": r[6]}
+                for r in edges if r[5] == "eu_curated"
+            ],
             "kreise": {r["ags"]: r["name"] for r in
                        conn.execute("SELECT ags, name FROM kreis")},
         }
@@ -404,9 +423,17 @@ def authority_detail(authority_id: int):
         raise HTTPException(404)
     card = authority_card(conn, authority_id)
     edges = conn.execute(
-        """SELECT e.relation, e.matter, a2.id, a2.name, a2.kind
+        """SELECT e.relation, e.matter, e.note, e.source, e.source_url,
+                  a2.id, a2.name, a2.kind
            FROM authority_edge e JOIN authority a2 ON a2.id = e.to_authority
            WHERE e.from_authority = ?""", (authority_id,)).fetchall()
     card["related"] = [dict(e) for e in edges]
+    incoming = conn.execute(
+        """SELECT e.relation, e.matter, e.note, e.source, e.source_url,
+                  a2.id, a2.name, a2.kind
+           FROM authority_edge e
+           JOIN authority a2 ON a2.id = e.from_authority
+           WHERE e.to_authority = ?""", (authority_id,)).fetchall()
+    card["related_incoming"] = [dict(e) for e in incoming]
     card["caveats"] = caveats_for(conn, [("authority", str(authority_id))])
     return card

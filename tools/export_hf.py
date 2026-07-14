@@ -36,7 +36,7 @@ TABLES: dict[str, str] = {
         SELECT authority_id, kind, level, area, rank FROM competence""",
     "edges": """
         SELECT from_authority, to_authority, relation, matter, note,
-               delta, trust
+               delta, trust, source, source_url
         FROM authority_edge""",
     "places_courts": """
         SELECT plz, ortk, ort, gs_key, gemeinde_ags FROM jz_place""",
@@ -86,9 +86,11 @@ license_name: sntiq-dual-by-audience
 license_link: https://github.com/SNTIQ-Team/amtsgraph/blob/main/LICENSING.md
 language:
   - de
-pretty_name: "Amtsgraph — German public-authority competence graph"
+pretty_name: "Amtsgraph — German authority and EU institution graph"
 tags:
   - germany
+  - european-union
+  - eu-institutions
   - legal
   - government
   - courts
@@ -102,14 +104,16 @@ configs:
 
 # Amtsgraph
 
-**The open, validated graph of German public authorities — who is
-competent, where, and for what.**
+**The open, validated graph of German public authorities and a curated,
+source-backed EU institutional layer — who is competent, where, and for
+what, without flattening distinct legal relations into a fake hierarchy.**
 
 Built {today} from official registers (Orts- und Gerichtsverzeichnis,
 PVOG/FITKO, Bundesagentur für Arbeit, Destatis, BayernPortal, OpenPLZ,
-xRepository). Every build passes a validation gate (coverage, collision,
-contiguity, benchmark checks) before release; every record carries
-provenance (source, URL, fetch timestamp).
+xRepository), plus EU primary law and official institution pages for the
+reviewed 11-node EU overlay. Every build passes a validation gate (coverage,
+collision, contiguity, benchmark and EU cross-hierarchy checks) before
+release; every record carries provenance (source, URL, fetch timestamp).
 
 ## Files
 
@@ -134,6 +138,16 @@ provenance (source, URL, fetch timestamp).
 4. The organisational web (Bavaria): traverse `edges` with
    `relation='parent'` for department hierarchies, `'supervision'` for
    oversight, `'appeal'` for derived court appeal routes.
+5. The curated EU overlay uses `eu_institution`, `eu_body` and `eu_court`
+   nodes.  Its edges are deliberately limited to the relation named in each
+   row (`institutional_part`, `political_accountability`, `judicial_review`,
+   `co_legislation`, `reporting_accountability`, `financial_audit`,
+   `maladministration_review`, `sectoral_oversight`, or a judicial `appeal`).
+   Read `note` and `source_url`: there are no EU-to-German supervisory edges.
+   Treaty-defined preliminary rulings can bind the referring national court
+   on the EU-law question, but are judicial cooperation rather than an appeal
+   from its judgment; that class-level procedure is documented, not guessed
+   as a blanket authority hierarchy.
 
 ## Null semantics
 
@@ -149,7 +163,8 @@ Empty fields are deliberate, not dirty data:
 - `valid_to` is null for active records; a timestamp marks retired ones
   (kept for traceability — e.g. offices replaced by a more precise
   department).
-- `matter` on edges is null for non-court relations (parent, supervision).
+- `matter` on edges is null for non-court relations and the EU judicial
+  overlay; EU access and jurisdiction remain procedure-specific.
 - `external_ids` may be empty for organisational units that have no
   official register identity of their own.
 
@@ -192,7 +207,7 @@ def main() -> int:
         "authorities": "all authorities with contacts, provenance, external IDs",
         "court_chains": "instance chains per (plz, ortk, matter)",
         "competences": "kind × area assignments (rank 0 = apply here)",
-        "edges": "parent / supervision / appeal / successor relations",
+        "edges": "typed, weighted relations with provenance and legal limits",
         "places_courts": "official court-resolution place register",
         "municipalities": "AGS/ARS spine with postal codes (M:N)",
         "matters": "legal-matter taxonomy (14 core + special)",

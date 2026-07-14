@@ -15,6 +15,7 @@ import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 
@@ -23,6 +24,7 @@ from common import ROOT, latest_snapshot, normalize_name, read_jsonl
 
 DB_PATH = ROOT / "data" / "atlas.db"
 SCHEMA = ROOT / "db" / "schema.sql"
+EU_OVERLAY = ROOT / "pipeline" / "eu_institutions.yaml"
 
 KIND_BY_NAME = [  # order matters: first match wins
     ("generalstaatsanwaltschaft", "generalstaatsanwaltschaft"),
@@ -198,9 +200,14 @@ def load_justiz(db: sqlite3.Connection, snap: Path):
     # derived appeal edges (court role only), cross-checked by validate
     for (plz, ortk, matter), rows in _group_chains(db):
         for lower, upper in zip(rows, rows[1:]):
-            db.execute("INSERT OR IGNORE INTO authority_edge VALUES "
-                       "(?,?,?,?,?, 1.0, 0.95)",   # strictly directed, official register
-                       (lower, upper, "appeal", matter, f"derived:{plz}|{ortk}"))
+            db.execute(
+                       """INSERT OR IGNORE INTO authority_edge
+                          (from_authority,to_authority,relation,matter,note,
+                           delta,trust,source,source_url)
+                          VALUES (?,?,?,?,?,1.0,0.95,
+                                  'justizadressen',?)""",
+                       (lower, upper, "appeal", matter,
+                        f"derived:{plz}|{ortk}", src_url))
 
     # any (place x core matter) the register answered empty even on retry is
     # a real data gap: cover it with an explicit caveat so the API can say
@@ -376,10 +383,14 @@ def load_pvog(db: sqlite3.Connection, snap: Path):
         if is_ambiguous:
             ambiguous[(ags, kind)] = 1
     for lo, ob in supervision_edges:
-        db.execute("INSERT OR IGNORE INTO authority_edge VALUES "
-                   "(?,?,'supervision',NULL,'asylblg: übergeordnete Behörde',"
-                   " 0.7, 0.75)",       # semi-directed upward, pvog trust
-                   (lo, ob))
+        db.execute(
+            """INSERT OR IGNORE INTO authority_edge
+               (from_authority,to_authority,relation,matter,note,delta,trust,
+                source,source_url)
+               VALUES (?,?,'supervision',NULL,
+                       'asylblg: übergeordnete Behörde',0.7,0.75,'pvog',
+                       'https://pvog.fitko.net/suchdienst/api')""",
+            (lo, ob))       # semi-directed upward, pvog trust
     if supervision_edges:
         print(f"pvog: {len(supervision_edges)} supervision edges (asylblg)")
     # resolution runs on competence.kind; authority.kind is just the primary
@@ -708,10 +719,15 @@ def load_bayernportal(db: sqlite3.Connection, snap: Path):
             parent = (aid_by_key.get(u["parent_key"])
                       if u.get("parent_key") else root_aid)
             if child and parent and child != parent:
-                db.execute("INSERT OR IGNORE INTO authority_edge VALUES "
-                           "(?,?,'parent',NULL,'bayernportal organigramm',"
-                           " 0.45, 0.90)",  # dept->parent easy, parent->dept fan-out
-                           (child, parent))
+                db.execute(
+                    """INSERT OR IGNORE INTO authority_edge
+                       (from_authority,to_authority,relation,matter,note,
+                        delta,trust,source,source_url)
+                       VALUES (?,?,'parent',NULL,'bayernportal organigramm',
+                               0.45,0.90,'bayernportal',?)""",
+                    (child, parent,
+                     (f"https://www.bayernportal.de/dokumente/behoerde/"
+                      f"{u.get('root_id')}/organigramm")))
                 n_edges += 1
 
         # unique department replaces the generic answer for its kind
@@ -778,6 +794,147 @@ def load_bayernportal(db: sqlite3.Connection, snap: Path):
               f"kreis match: {unmatched_roots[:4]}")
     print(f"bayernportal: {n_auth} units, {n_edges} parent edges, "
           f"{n_comp} competences, {n_replaced} generic replaced")
+
+
+def load_eu_overlay(db: sqlite3.Connection,
+                    path: Path = EU_OVERLAY) -> str:
+    """Load the small, reviewed EU institutional overlay.
+
+    This is intentionally not a guessed EU->Germany hierarchy.  Every edge
+    joins two entities declared in the overlay, carries an official EU source,
+    and names its limited legal meaning.  In particular, the loader rejects
+    the generic ``supervision`` relation: only the narrowly scoped
+    ``sectoral_oversight`` relation is available for the EDPS.
+
+    Returns the overlay's verification date for build metadata.
+    """
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or not isinstance(raw.get("meta"), dict):
+        raise ValueError(f"EU overlay {path} has no meta mapping")
+    authorities = raw.get("authorities")
+    edges = raw.get("edges")
+    if not isinstance(authorities, list) or len(authorities) < 11:
+        raise ValueError("EU overlay must contain the seven Article 13 "
+                         "institutions, both CJEU courts and two EU bodies")
+    if not isinstance(edges, list):
+        raise ValueError("EU overlay edges must be a list")
+
+    verified_at = str(raw["meta"].get("verified_at") or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", verified_at):
+        raise ValueError("EU overlay meta.verified_at must be YYYY-MM-DD")
+
+    def official_url(value: object, field: str) -> str:
+        url = str(value or "").strip()
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+        if parsed.scheme != "https" or not (host == "europa.eu" or
+                                             host.endswith(".europa.eu")):
+            raise ValueError(f"EU overlay {field} is not an official "
+                             f"europa.eu HTTPS URL: {url!r}")
+        return url
+
+    allowed_kinds = {"eu_institution", "eu_body", "eu_court"}
+    allowed_relations = {"appeal", "institutional_part",
+                         "political_accountability", "judicial_review",
+                         "cooperation", "co_legislation",
+                         "reporting_accountability", "financial_audit",
+                         "maladministration_review", "sectoral_oversight"}
+    aid_by_key: dict[str, int] = {}
+    seen_external: set[str] = set()
+    for record in authorities:
+        if not isinstance(record, dict):
+            raise ValueError("EU authority entry must be a mapping")
+        key = str(record.get("key") or "").strip()
+        ext = str(record.get("external_id") or "").strip()
+        kind = str(record.get("kind") or "").strip()
+        name = str(record.get("name") or "").strip()
+        if not key or key in aid_by_key:
+            raise ValueError(f"duplicate/empty EU authority key: {key!r}")
+        if not ext or ext in seen_external:
+            raise ValueError(f"duplicate/empty EU external id: {ext!r}")
+        if kind not in allowed_kinds:
+            raise ValueError(f"unsupported EU authority kind: {kind!r}")
+        if not name:
+            raise ValueError(f"EU authority {key!r} has no name")
+        source_url = official_url(record.get("source_url"),
+                                  f"authorities[{key}].source_url")
+        web = official_url(record.get("web"), f"authorities[{key}].web")
+        cur = db.execute(
+            """INSERT INTO authority
+               (kind,name,name_norm,city,web,source,source_url,fetched_at,
+                source_updated_at)
+               VALUES (?,?,?,?,?,'eu_curated',?,?,?)""",
+            (kind, name, normalize_name(name), record.get("city"), web,
+             source_url, verified_at, verified_at))
+        aid = cur.lastrowid
+        aid_by_key[key] = aid
+        seen_external.add(ext)
+        db.execute("INSERT INTO authority_external_id VALUES (?,?,?)",
+                   (aid, "eu_official", ext))
+        db.execute(
+            """INSERT INTO caveat
+               (scope_level,scope_key,matter,severity,text_de,source)
+               VALUES ('authority',?,NULL,'info',?,'eu_curated')""",
+            (str(aid),
+             "EU-Kanten bilden nur die ausdrücklich bezeichnete, "
+             "quellenbelegte Rechtsbeziehung ab. Sie begründen weder eine "
+             "allgemeine Weisungs- oder Aufsichtskette noch eine direkte "
+             "Zuständigkeit für deutsche Behörden."))
+        if kind == "eu_court":
+            db.execute(
+                """INSERT INTO caveat
+                   (scope_level,scope_key,matter,severity,text_de,source)
+                   VALUES ('authority',?,NULL,'info',?,'eu_curated')""",
+                (str(aid),
+                 "Zugang, Zuständigkeit und Rechtsmittel zu den "
+                 "Unionsgerichten richten sich nach Verträgen, Satzung und "
+                 "Verfahrensordnungen; die Graphkante ist kein direkter "
+                 "Einreichungsweg."))
+
+    seen_edges: set[tuple[str, str, str]] = set()
+    for edge in edges:
+        if not isinstance(edge, dict):
+            raise ValueError("EU edge entry must be a mapping")
+        src = str(edge.get("from") or "")
+        dst = str(edge.get("to") or "")
+        rel = str(edge.get("relation") or "")
+        if src not in aid_by_key or dst not in aid_by_key or src == dst:
+            raise ValueError(f"invalid EU edge endpoints: {src!r}->{dst!r}")
+        if rel not in allowed_relations:
+            raise ValueError(f"unsupported EU edge relation: {rel!r}")
+        key = (src, dst, rel)
+        if key in seen_edges:
+            raise ValueError(f"duplicate EU edge: {key}")
+        seen_edges.add(key)
+        note = " ".join(str(edge.get("note") or "").split())
+        if not note:
+            raise ValueError(f"EU edge {key} has no limiting note")
+        if rel in {"judicial_review", "political_accountability"} and \
+                "keine" not in note.lower():
+            raise ValueError(f"EU edge {key} must state its non-hierarchical "
+                             "limit")
+        if rel == "sectoral_oversight" and \
+                "keine zuständigkeit für deutsche behörden" not in note.lower():
+            raise ValueError(f"EU edge {key} must exclude German authorities")
+        delta = float(edge.get("delta"))
+        trust = float(edge.get("trust"))
+        if not 0.0 <= delta <= 1.0 or not 0.0 <= trust <= 1.0:
+            raise ValueError(f"EU edge {key} has invalid delta/trust")
+        if rel in {"cooperation", "co_legislation"} and delta != 0.0:
+            raise ValueError(f"EU {rel} edge {key} must be symmetric")
+        source_url = official_url(edge.get("source_url"),
+                                  f"edges[{src}->{dst}:{rel}].source_url")
+        db.execute(
+            """INSERT INTO authority_edge
+               (from_authority,to_authority,relation,matter,note,delta,trust,
+                source,source_url)
+               VALUES (?,?,?,NULL,?,?,?,'eu_curated',?)""",
+            (aid_by_key[src], aid_by_key[dst], rel, note, delta, trust,
+             source_url))
+
+    print(f"eu_curated: {len(aid_by_key)} authorities, {len(seen_edges)} "
+          f"evidence-backed edges (no EU->German edges)")
+    return verified_at
 
 
 def apply_overrides(db: sqlite3.Connection):
@@ -873,6 +1030,9 @@ def main() -> int:
             snaps[source] = snap.name
         else:
             print(f"[{source}] no snapshot — skipped")
+
+    print(f"[eu_curated] loading {EU_OVERLAY}")
+    snaps["eu_curated"] = load_eu_overlay(db)
 
     apply_overrides(db)
     db.execute("INSERT OR REPLACE INTO build_info VALUES ('built_at', ?)", (now(),))

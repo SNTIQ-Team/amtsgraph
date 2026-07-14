@@ -1,9 +1,9 @@
-# Architecture (v2.1 — correctness-first)
+# Architecture (v2.2 — correctness-first)
 
 ## Why correctness drives the design
 
 This data feeds legal action. A wrong court means a filing lands in the wrong
-place, a deadline (Frist) is missed, a case is lost. Three findings shaped v2.1:
+place, a deadline (Frist) is missed, a case is lost. Three findings shaped v2:
 
 1. **Court competence is per (PLZ, Ort), not per PLZ.** Official register:
    PLZ 25712 contains 9 villages belonging to *different* Amtsgericht
@@ -59,6 +59,18 @@ Key decisions:
 - **Non-courts** (Ausländerbehörde, Jobcenter, Sozialamt …) resolve by
   `competence` (kind × Gemeinde-AGS), harvested from the federal PVOG
   Zuständigkeitsfinder; granularity can drop to PLZ where needed.
+- **EU institutions are a curated, isolated overlay.**
+  `pipeline/eu_institutions.yaml` contains the seven Article 13 TEU
+  institutions, the Court of Justice and General Court, Ombudsman and EDPS.
+  It is rebuilt with the database and validated like harvested data.  Every
+  edge has a limiting note and official EU source; no edge connects an EU
+  node to a German authority.  This prevents judicial review, political
+  accountability or sector-specific data-protection supervision from being
+  misread as a generic administrative hierarchy.  The separate Article 267
+  preliminary-ruling procedure can produce a binding answer on EU law for a
+  German court, but is judicial cooperation rather than an appeal; this
+  class-level effect is documented instead of guessed as thousands of direct
+  authority edges.
 
 ## Resolution flow
 

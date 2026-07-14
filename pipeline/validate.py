@@ -122,6 +122,57 @@ def check(db: sqlite3.Connection) -> list[str]:
                 errors.append(f"[{kind}] {len(rows)} Gemeinden with >1 "
                               f"authority, e.g. {rows[:3]}")
 
+    # ---- curated EU institutional overlay ------------------------------
+    # The overlay is a deliberately separate institutional island.  It must
+    # never turn EU competences into a made-up direct supervisory chain over
+    # German authorities; every edge also needs its own official evidence.
+    eu_ids = q(db, """SELECT value FROM authority_external_id
+                       WHERE scheme='eu_official'""")
+    if eu_ids:
+        required = {"EP", "EUCO", "CONSIL", "COM", "CJEU", "CJEU-CJ",
+                    "CJEU-GC", "ECB", "ECA", "EO", "EDPS"}
+        missing = required - {r[0] for r in eu_ids}
+        if missing:
+            errors.append(f"eu_curated: missing core entities {sorted(missing)}")
+        rows = q(db, """SELECT a.id, a.kind, a.name FROM authority a
+                         WHERE a.source='eu_curated'
+                           AND a.kind NOT IN
+                             ('eu_institution','eu_body','eu_court')""")
+        if rows:
+            errors.append(f"eu_curated: unsupported node kinds {rows[:3]}")
+        rows = q(db, """SELECT e.from_authority, e.to_authority, e.relation
+                         FROM authority_edge e
+                         JOIN authority a ON a.id=e.from_authority
+                         JOIN authority b ON b.id=e.to_authority
+                         WHERE (a.source='eu_curated' OR b.source='eu_curated')
+                           AND (a.source<>'eu_curated' OR b.source<>'eu_curated')""")
+        if rows:
+            errors.append(f"eu_curated: {len(rows)} EU-to-non-EU edges "
+                          f"(blanket hierarchy forbidden), e.g. {rows[:3]}")
+        rows = q(db, """SELECT relation FROM authority_edge
+                         WHERE source='eu_curated'
+                           AND (source_url IS NULL OR note IS NULL
+                                OR source_url NOT LIKE 'https://%europa.eu/%')""")
+        if rows:
+            errors.append(f"eu_curated: {len(rows)} edges without official "
+                          "EU provenance/limiting note")
+        n = q(db, """SELECT COUNT(*) FROM authority_edge e
+                      JOIN authority a ON a.id=e.from_authority
+                      JOIN authority b ON b.id=e.to_authority
+                      WHERE (a.source='eu_curated' OR b.source='eu_curated')
+                        AND e.relation='supervision'""")[0][0]
+        if n:
+            errors.append(f"eu_curated: {n} generic supervision edges "
+                          "(use an accurately scoped relation instead)")
+        n = q(db, """SELECT COUNT(*) FROM authority_edge
+                      WHERE source='eu_curated'
+                        AND relation='sectoral_oversight'
+                        AND lower(note) NOT LIKE
+                          '%keine zuständigkeit für deutsche behörden%'""")[0][0]
+        if n:
+            errors.append(f"eu_curated: {n} sectoral edges do not expressly "
+                          "exclude German-authority jurisdiction")
+
     # ---- orphans ---------------------------------------------------------
     # structural units of the organisational web (Abteilungen etc.) carry
     # no competence but are linked via parent edges — not orphans

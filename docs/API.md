@@ -12,7 +12,7 @@ There are **two** ways to query the graph:
 - **A) Production REST API** — `https://api.sntiq.com/v1` (FastAPI, JSON, CORS).
   This is what the `sntiq.com/dt/amtsgraph` frontend calls through a thin
   client. Source: [`api/main.py`](../api/main.py) (`title="Amtsgraph"`,
-  `version="2.1"`).
+  `version="2.2"`).
 - **B) Local dev browser** — `tools/browser.py` (port 8400, stdlib only,
   reads `data/atlas.db` read-only). A zero-dependency data browser with its
   own JSON API under `/api/`. Source: [`tools/browser.py`](../tools/browser.py).
@@ -106,12 +106,14 @@ curl -s https://api.sntiq.com/v1/stats
 ```
 ```json
 {
-  "authorities_active": 12873,
-  "court_chain_links":  41250,
-  "places":             8412,
-  "competences":        30120,
-  "parent_edges":       9004,
-  "caveats":            215
+  "authorities_active": 19238,
+  "court_chain_links":  338873,
+  "places":             14057,
+  "competences":        77125,
+  "parent_edges":       7195,
+  "eu_authorities":     11,
+  "eu_edges":           31,
+  "caveats":            5385
 }
 ```
 
@@ -122,6 +124,8 @@ curl -s https://api.sntiq.com/v1/stats
 | `places` | Rows in `jz_place` (justiz place register). |
 | `competences` | Competence assignments (authority × kind × area). |
 | `parent_edges` | `authority_edge` rows with `relation='parent'`. |
+| `eu_authorities` | Curated EU institutions, bodies and courts. |
+| `eu_edges` | Evidence-backed relations wholly inside the EU overlay. |
 | `caveats` | Total caveats. |
 
 > The **local browser**'s `/api/stats` returns a *different* set
@@ -244,8 +248,14 @@ curl -s https://api.sntiq.com/v1/graph
     [1025, "landgericht", "Landgericht Berlin II", "11", "11000"]
   ],
   "edges": [
-    [1024, 1025, "appeal"]
+    [1024, 1025, "appeal"],
+    [20001, 20002, "judicial_review"]
   ],
+  "edge_meta": [{
+    "from": 20001, "to": 20002, "relation": "judicial_review",
+    "matter": null, "note": "Gerichtliche Kontrolle nur im Rahmen …",
+    "source": "eu_curated", "source_url": "https://eur-lex.europa.eu/…"
+  }],
   "kreise": { "11000": "Berlin" }
 }
 ```
@@ -253,8 +263,16 @@ curl -s https://api.sntiq.com/v1/graph
 - **`nodes`**: `[id, kind, name, land, kreis]`. `land` is a 2-digit and
   `kreis` a 5-digit AGS prefix, derived from competence areas / postal codes
   and propagated across edges.
-- **`edges`**: `[from_id, to_id, relation]`. `relation` is one of `parent`,
-  `appeal`, `supervision`, `successor`.
+- **`edges`**: uniformly `[from_id, to_id, relation]` for backward-compatible
+  streaming/destructuring.
+- **`edge_meta`**: sparse objects for the curated EU edges, keyed by
+  `from`/`to`/`relation`, with `matter`, the legally limiting `note`, and
+  `source`/`source_url`. This keeps the precise scope without multiplying the
+  payload for thousands of German edges.
+  EU relation types are `institutional_part`, `political_accountability`,
+  `judicial_review`, `co_legislation`, `reporting_accountability`,
+  `financial_audit`, `maladministration_review`, `sectoral_oversight` and the
+  judicial `appeal`.
 - **`kreise`**: `{ags → name}` lookup for the 5-digit Kreis codes.
 
 > This endpoint is deliberately compact. The **weighted** graph (edge `delta`,
@@ -443,15 +461,18 @@ Errors: `404` for an unknown AGS or when no authority of that kind is known;
 
 ## `GET /authorities/{authority_id}`
 
-Full card for one authority plus its outgoing edges.
+Full card for one authority plus its outgoing and incoming edges.
 
 ```bash
 curl -s https://api.sntiq.com/v1/authorities/1024
 ```
 
-Returns the [authority card](#authority-card) with two extra keys:
+Returns the [authority card](#authority-card) with three extra keys:
 
-- `related`: outgoing edges `[{relation, matter, id, name, kind}]`.
+- `related`: outgoing edges
+  `[{relation, matter, note, source, source_url, id, name, kind}]`.
+- `related_incoming`: the same shape for incoming edges; `id`/`name`/`kind`
+  identify the source node, so consumers must not reverse the relation label.
 - `caveats`: authority-scoped caveats.
 
 `404` if the id is unknown.
