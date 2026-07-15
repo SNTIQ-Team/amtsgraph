@@ -148,6 +148,10 @@ release; every record carries provenance (source, URL, fetch timestamp).
    on the EU-law question, but are judicial cooperation rather than an appeal
    from its judgment; that class-level procedure is documented, not guessed
    as a blanket authority hierarchy.
+   Each of the 11 EU nodes has an officially sourced postal address and
+   telephone. E-mail and fax remain null when the institution publishes only
+   a contact form; the Court of Justice and General Court use their distinct
+   official registry mailboxes, and CURIA states that fax is no longer used.
 
 ## Null semantics
 

@@ -861,11 +861,14 @@ def load_eu_overlay(db: sqlite3.Connection,
         web = official_url(record.get("web"), f"authorities[{key}].web")
         cur = db.execute(
             """INSERT INTO authority
-               (kind,name,name_norm,city,web,source,source_url,fetched_at,
-                source_updated_at)
-               VALUES (?,?,?,?,?,'eu_curated',?,?,?)""",
-            (kind, name, normalize_name(name), record.get("city"), web,
-             source_url, verified_at, verified_at))
+               (kind,name,name_norm,street,plz,city,postal_address,phone,fax,
+                email,web,source,source_url,fetched_at,source_updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,'eu_curated',?,?,?)""",
+            (kind, name, normalize_name(name), record.get("street"),
+             record.get("plz"), record.get("city"),
+             record.get("postal_address"), record.get("phone"),
+             record.get("fax"), record.get("email"), web, source_url,
+             verified_at, verified_at))
         aid = cur.lastrowid
         aid_by_key[key] = aid
         seen_external.add(ext)

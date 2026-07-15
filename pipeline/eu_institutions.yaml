@@ -1,5 +1,5 @@
 meta:
-  verified_at: "2026-07-14"
+  verified_at: "2026-07-15"
   scope: >
     Curated institutional map of the seven institutions named in Article 13
     TEU, the two courts which form the CJEU, and two independent EU bodies.
@@ -18,89 +18,138 @@ authorities:
     external_id: EP
     kind: eu_institution
     name: Europäisches Parlament
-    city: Brüssel / Straßburg / Luxemburg
+    street: Rue Wiertz 60 / Wiertzstraat 60
+    plz: B-1047
+    city: Brüssel
+    postal_address: Europäisches Parlament, Rue Wiertz 60, B-1047 Brüssel, Belgien
+    phone: +32 2 284 21 11
+    email: epbrussels@europarl.europa.eu
     web: https://www.europarl.europa.eu/portal/de
-    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+    source_url: https://www.europarl.europa.eu/portal/de/contact
 
   - key: european_council
     external_id: EUCO
     kind: eu_institution
     name: Europäischer Rat
+    street: Rue de la Loi / Wetstraat 175
+    plz: B-1048
     city: Brüssel
+    postal_address: Europäischer Rat, Rue de la Loi / Wetstraat 175, B-1048 Brüssel, Belgien
+    phone: +32 2 281 61 11
+    fax: +32 2 281 69 34
     web: https://www.consilium.europa.eu/de/european-council/
-    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+    source_url: https://www.consilium.europa.eu/de/contact/address/
 
   - key: council
     external_id: CONSIL
     kind: eu_institution
     name: Rat der Europäischen Union
-    city: Brüssel / Luxemburg
+    street: Rue de la Loi / Wetstraat 175
+    plz: B-1048
+    city: Brüssel
+    postal_address: Rat der Europäischen Union, Rue de la Loi / Wetstraat 175, B-1048 Brüssel, Belgien
+    phone: +32 2 281 61 11
+    fax: +32 2 281 69 34
     web: https://www.consilium.europa.eu/de/council-eu/
-    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+    source_url: https://www.consilium.europa.eu/de/contact/address/
 
   - key: commission
     external_id: COM
     kind: eu_institution
     name: Europäische Kommission
-    city: Brüssel / Luxemburg
+    street: Rue de la Loi 200
+    plz: "1049"
+    city: Brüssel
+    postal_address: Europäische Kommission, Rue de la Loi 200, 1049 Brüssel, Belgien
+    phone: +32 2 299 11 11
     web: https://commission.europa.eu/index_de
-    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+    source_url: https://commission.europa.eu/about/contact_de
 
   - key: cjeu
     external_id: CJEU
     kind: eu_institution
     name: Gerichtshof der Europäischen Union
+    plz: L-2925
     city: Luxemburg
+    postal_address: Gerichtshof der Europäischen Union, L-2925 Luxemburg
+    phone: +352 4303-1
     web: https://curia.europa.eu/site/
-    source_url: https://curia.europa.eu/site/jcms/d2_5390/de/ueber-den-gerichtshof-der-europaeischen-union
+    source_url: https://curia.europa.eu/site/jcms/d2_5186/de/kontakt
 
   - key: court_of_justice
     external_id: CJEU-CJ
     kind: eu_court
     name: Gerichtshof
+    street: Rue du Fort Niedergrünewald
+    plz: L-2925
     city: Luxemburg
+    postal_address: Kanzlei des Gerichtshofs, Rue du Fort Niedergrünewald, L-2925 Luxemburg
+    phone: +352 4303-1
+    email: ECJ.Registry@curia.europa.eu
     web: https://curia.europa.eu/site/
-    source_url: https://curia.europa.eu/site/jcms/d2_5391/de/ueber-den-gerichtshof
+    source_url: https://curia.europa.eu/site/jcms/d2_5109/de/einreichung-von-verfahrensdokumenten
 
   - key: general_court
     external_id: CJEU-GC
     kind: eu_court
     name: Gericht der Europäischen Union
+    street: Rue du Fort Niedergrünewald
+    plz: L-2925
     city: Luxemburg
+    postal_address: Kanzlei des Gerichts der Europäischen Union, Rue du Fort Niedergrünewald, L-2925 Luxemburg
+    phone: +352 4303-1
+    email: GC.Registry@curia.europa.eu
     web: https://curia.europa.eu/site/
-    source_url: https://curia.europa.eu/site/jcms/d2_5393/de/ueber-das-gericht
+    source_url: https://curia.europa.eu/site/jcms/d2_5113/de/einreichung-von-verfahrensdokumenten
 
   - key: ecb
     external_id: ECB
     kind: eu_institution
     name: Europäische Zentralbank
+    street: Sonnemannstraße 20
+    plz: "60314"
     city: Frankfurt am Main
+    postal_address: Europäische Zentralbank, 60640 Frankfurt am Main, Deutschland
+    phone: +49 69 1344 0
     web: https://www.ecb.europa.eu/home/html/index.de.html
-    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+    source_url: https://www.ecb.europa.eu/ecb/contacts/address/html/index.de.html
 
   - key: eca
     external_id: ECA
     kind: eu_institution
     name: Europäischer Rechnungshof
+    street: 12, rue Alcide De Gasperi
+    plz: L-1615
     city: Luxemburg
+    postal_address: Europäischer Rechnungshof, 12 rue Alcide De Gasperi, L-1615 Luxemburg
+    phone: +352 4398-1
     web: https://www.eca.europa.eu/de/
-    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+    source_url: https://www.eca.europa.eu/de/contact
 
   - key: ombudsman
     external_id: EO
     kind: eu_body
     name: Europäische Bürgerbeauftragte
-    city: Straßburg
+    street: 1 avenue du Président Robert Schuman
+    plz: F-67001
+    city: Straßburg Cedex
+    postal_address: Europäische Bürgerbeauftragte, 1 avenue du Président Robert Schuman, CS 30403, F-67001 Straßburg Cedex, Frankreich
+    phone: +33 3 88 17 23 13
     web: https://www.ombudsman.europa.eu/de/home
-    source_url: https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies/types-institutions-and-bodies_de
+    source_url: https://www.ombudsman.europa.eu/de/contacts
 
   - key: edps
     external_id: EDPS
     kind: eu_body
     name: Europäischer Datenschutzbeauftragter
+    street: Rue Montoyer 30
+    plz: B-1000
     city: Brüssel
+    postal_address: Europäischer Datenschutzbeauftragter, Rue Wiertz 60, B-1047 Brüssel, Belgien
+    phone: +32 2 283 19 00
+    email: edps@edps.europa.eu
     web: https://www.edps.europa.eu/_de
-    source_url: https://www.edps.europa.eu/data-protection/our-role-supervisor_de
+    source_url: https://www.edps.europa.eu/about-edps/contact_de
 
 edges:
   # The CJEU is one Article 13 institution composed of two distinct courts.

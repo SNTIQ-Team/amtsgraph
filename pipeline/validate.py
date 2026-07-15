@@ -199,6 +199,15 @@ def check(db: sqlite3.Connection) -> list[str]:
         if rows:
             errors.append(f"eu_curated: {len(rows)} edges without official "
                           "EU provenance/limiting note")
+        rows = q(db, """SELECT a.id, a.name FROM authority a
+                         WHERE a.source='eu_curated'
+                           AND (a.city IS NULL OR a.postal_address IS NULL
+                                OR a.phone IS NULL OR a.source_url IS NULL
+                                OR a.source_url NOT LIKE
+                                   'https://%europa.eu/%')""")
+        if rows:
+            errors.append(f"eu_curated: {len(rows)} contact cards without "
+                          f"address/phone/official provenance, e.g. {rows[:3]}")
         n = q(db, """SELECT COUNT(*) FROM authority_edge e
                       JOIN authority a ON a.id=e.from_authority
                       JOIN authority b ON b.id=e.to_authority

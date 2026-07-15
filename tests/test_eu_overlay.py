@@ -28,7 +28,7 @@ class EUOverlayTest(unittest.TestCase):
         self.db.close()
 
     def test_core_entities_and_relation_vocabulary(self):
-        self.assertEqual("2026-07-14", self.verified)
+        self.assertEqual("2026-07-15", self.verified)
         self.assertEqual(
             [("eu_body", 2), ("eu_court", 2), ("eu_institution", 7)],
             self.db.execute(
@@ -46,6 +46,37 @@ class EUOverlayTest(unittest.TestCase):
         self.assertEqual(8, relations["sectoral_oversight"])
         self.assertNotIn("supervision", relations)
         self.assertNotIn("cooperation", relations)
+
+    def test_all_eu_entities_publish_real_contact_cards(self):
+        rows = self.db.execute(
+            """SELECT e.value,a.street,a.plz,a.city,a.postal_address,
+                      a.phone,a.fax,a.email,a.source_url
+               FROM authority a
+               JOIN authority_external_id e ON e.authority_id=a.id
+               WHERE a.source='eu_curated' AND e.scheme='eu_official'"""
+        ).fetchall()
+        self.assertEqual(11, len(rows))
+        for ext, street, plz, city, postal, phone, fax, email, source in rows:
+            with self.subTest(external_id=ext):
+                self.assertTrue(city)
+                self.assertTrue(postal)
+                self.assertTrue(phone)
+                self.assertTrue(source.startswith("https://"))
+                self.assertIn("europa.eu", source)
+        by_id = {row[0]: row for row in rows}
+        self.assertEqual("epbrussels@europarl.europa.eu", by_id["EP"][7])
+        self.assertEqual("+32 2 281 69 34", by_id["EUCO"][6])
+        self.assertEqual("+32 2 281 69 34", by_id["CONSIL"][6])
+        self.assertEqual("ECJ.Registry@curia.europa.eu", by_id["CJEU-CJ"][7])
+        self.assertEqual("GC.Registry@curia.europa.eu", by_id["CJEU-GC"][7])
+        self.assertEqual("edps@edps.europa.eu", by_id["EDPS"][7])
+        # These official contact pages intentionally offer a form instead of
+        # a general-purpose mailbox; never synthesize an e-mail address.
+        for ext in ("EUCO", "CONSIL", "COM", "CJEU", "ECB", "ECA", "EO"):
+            self.assertIsNone(by_id[ext][7])
+        # CURIA explicitly says fax is no longer accepted for either court.
+        self.assertIsNone(by_id["CJEU-CJ"][6])
+        self.assertIsNone(by_id["CJEU-GC"][6])
 
     def test_no_eu_to_german_edge_and_all_edges_have_evidence(self):
         self.db.execute(

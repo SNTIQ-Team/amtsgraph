@@ -29,6 +29,9 @@ location?* It covers:
   co-legislation, reporting, financial audit, maladministration review and
   data-protection oversight.  It contains **no EU→German blanket-supervision
   edge**; every relation carries an official source and a limiting note.
+  All 11 nodes include an officially sourced postal address and telephone;
+  e-mail and fax are present only where the institution itself publishes a
+  general contact (the CURIA court registries are kept distinct).
 
 | | |
 |---|---|
