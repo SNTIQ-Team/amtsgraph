@@ -137,6 +137,34 @@ def check(db: sqlite3.Connection) -> list[str]:
                       WHERE from_authority=to_authority""")[0][0]
         errors.append(f"graph: {n} self-loop authority edges, e.g. {rows}")
 
+    # A Landratsamt root is a useful structural node kind, but only when it
+    # is really the standalone office.  Never promote named departments such
+    # as "Landratsamt IT" or "Landratsamt X - Abteilung ...".
+    rows = q(db, """SELECT a.id, a.name FROM authority a
+                     WHERE a.valid_to IS NULL AND a.kind='landratsamt'
+                       AND (a.name NOT GLOB 'Landratsamt *'
+                            OR instr(a.name, ' - ') > 0
+                            OR EXISTS (
+                                SELECT 1 FROM authority_edge e
+                                WHERE e.from_authority=a.id
+                                  AND e.relation='parent'))
+                     LIMIT 5""")
+    if rows:
+        errors.append("graph: unsafe landratsamt classifications, e.g. "
+                      f"{rows}")
+    rows = q(db, """SELECT a.id, a.name FROM authority a
+                     WHERE a.valid_to IS NULL AND a.kind='sonstige'
+                       AND a.name GLOB 'Landratsamt *'
+                       AND instr(a.name, ' - ') = 0
+                       AND NOT EXISTS (
+                           SELECT 1 FROM authority_edge e
+                           WHERE e.from_authority=a.id
+                             AND e.relation='parent')
+                     LIMIT 5""")
+    if rows:
+        errors.append("graph: standalone Landratsamt roots left as sonstige, "
+                      f"e.g. {rows}")
+
     # ---- curated EU institutional overlay ------------------------------
     # The overlay is a deliberately separate institutional island.  It must
     # never turn EU competences into a made-up direct supervisory chain over

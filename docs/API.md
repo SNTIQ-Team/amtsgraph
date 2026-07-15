@@ -489,7 +489,7 @@ moves under `provenance`.
 | Field | Type | Notes |
 |-------|------|-------|
 | `id` | int | Authority id. |
-| `kind` | string | e.g. `amtsgericht`, `auslaenderbehoerde`. |
+| `kind` | string | e.g. `amtsgericht`, `auslaenderbehoerde`, `landratsamt`. |
 | `name` | string | Official name. |
 | `name_norm` | string | Normalized name (search key). |
 | `legal_form` | string \| null | e.g. `Körperschaft des öffentlichen Rechts`. |

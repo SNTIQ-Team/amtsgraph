@@ -1026,6 +1026,34 @@ def drop_self_loops(db: sqlite3.Connection) -> int:
     return n
 
 
+def classify_landratsamt_roots(db: sqlite3.Connection) -> int:
+    """Give standalone district-office roots their structural node kind.
+
+    PVOG and BayernPortal ingest generic organisational containers as
+    ``sonstige`` because their actual competences live on relation rows.  A
+    standalone official name of the form ``Landratsamt <district>`` is,
+    however, an unambiguous authority type.  Keep the rule deliberately
+    structural: department names contain ``" - "`` and compactly named
+    units such as ``Landratsamt IT`` have an outgoing ``parent`` edge.  They
+    must remain at their source-derived/specialist kind.
+    """
+    cur = db.execute(
+        """UPDATE authority AS a SET kind='landratsamt'
+           WHERE a.valid_to IS NULL
+             AND a.kind='sonstige'
+             AND a.name GLOB 'Landratsamt *'
+             AND instr(a.name, ' - ') = 0
+             AND NOT EXISTS (
+                 SELECT 1 FROM authority_edge e
+                 WHERE e.from_authority=a.id AND e.relation='parent'
+             )"""
+    )
+    if cur.rowcount:
+        print(f"authority kinds: {cur.rowcount} standalone Landratsamt "
+              "roots classified")
+    return cur.rowcount
+
+
 # -------------------------------------------------------------------- main
 
 def main() -> int:
@@ -1055,6 +1083,7 @@ def main() -> int:
 
     apply_overrides(db)
     drop_self_loops(db)
+    classify_landratsamt_roots(db)
     db.execute("INSERT OR REPLACE INTO build_info VALUES ('built_at', ?)", (now(),))
     db.execute("INSERT OR REPLACE INTO build_info VALUES ('snapshots', ?)",
                (json.dumps(snaps),))

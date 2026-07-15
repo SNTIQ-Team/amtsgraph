@@ -123,6 +123,7 @@ INSERT INTO authority_kind VALUES
     ('eu_institution','Organ der Europäischen Union'),
     ('eu_body','Einrichtung der Europäischen Union'),
     ('eu_court','Gericht der Europäischen Union'),
+    ('landratsamt','Landratsamt'),
     ('justizbehoerde','Sonstige Justizbehörde'), ('sonstige','Sonstige Behörde');
 
 -- NB: not unique per (scheme,value) — a court department (Insolvenzgericht
