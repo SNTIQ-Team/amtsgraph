@@ -1,6 +1,48 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from api.research import research, create_research_router
+import pytest
+
+@pytest.mark.parametrize('scope', [
+    {'q':'x','ortk':'orphan'}, {'q':'x','norm':'orphan'},
+    {'act_id':'../../secret'}, {'ags':'bad','kind':'x'},
+    {'act_id':'fed_x','known_at':'2020-01-01T00:00:00'},
+    {'act_id':'fed_x','at':'2020-02-30'}, {'act_id':'fed_x','at':'20200101'},
+    {'plz':12345,'matter':'civil'}, {'q':'x','limit':True}, {'q':' '},
+])
+def test_direct_domain_rejects_every_invalid_scope_before_source_call(scope):
+    def forbidden(*args,**kwargs):raise AssertionError('upstream must not run')
+    with pytest.raises(ValueError):research(scope=scope,court=forbidden,authority=forbidden,legal=forbidden)
+
+def test_two_legal_calls_cannot_hide_a_snapshot_change():
+    copies=iter(['old','new'])
+    result=research(scope={'q':'x','act_id':'fed_x'},court=None,authority=None,
+        legal=lambda route:{'status':'ok','data':{},'representation':{'snapshot':next(copies)}})
+    assert result['status']=='partial'
+    assert result['issues'][0]['reason']=='mixed_snapshots'
+
+def test_transport_carries_actual_byte_hash_and_snapshot(monkeypatch):
+    from api import research as module
+    from email.message import Message
+    import io, hashlib
+    body=b'{"status":"ok","total":0}'
+    headers=Message();headers['Content-Type']='application/json';headers['X-Lexgraph-Snapshot']='release-test'
+    class Response(io.BytesIO):pass
+    response=Response(body);response.headers=headers
+    monkeypatch.setattr(module,'urlopen',lambda *args,**kwargs:response)
+    result=module.lexgraph_get('/search?q=x')
+    assert result['data']['total']==0
+    assert result['representation']['sha256']==hashlib.sha256(body).hexdigest()
+    assert result['representation']['snapshot']=='release-test'
+
+def test_transport_does_not_mask_source_integrity_or_snapshot_failure(monkeypatch):
+    from api import research as module
+    from urllib.error import HTTPError
+    import io
+    def fail(*args,**kwargs):
+        raise HTTPError('fixture',503,'unavailable',{},io.BytesIO(b'{"detail":{"status":"integrity_check_failed"}}'))
+    monkeypatch.setattr(module,'urlopen',fail)
+    assert module.lexgraph_get('/search?q=x')['reason']=='integrity_check_failed'
 
 def test_joint_scope_preserves_assignment_and_legal_source_metadata():
     calls=[]
