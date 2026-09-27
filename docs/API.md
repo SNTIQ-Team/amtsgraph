@@ -19,6 +19,28 @@ There are **two** ways to query the graph:
 
 Both read the same build artifact, `data/atlas.db`.
 
+### Lexgraph snapshot preconditions at the shared proxy
+
+The deployment config also proxies Lexgraph at `https://api.sntiq.com/lex/`.
+Requests with a nonempty `If-Lexgraph-Snapshot` header always reach the live
+Lexgraph worker: nginx neither reads nor writes its public cache for them.
+The worker returns `409 stale_snapshot` if the requested generation differs
+from its loaded corpus. A source outage remains an upstream error, even when
+a cached representation is available. Requests without a snapshot retain the
+ordinary public cache and Origin buckets.
+
+Header presence is mapped to a boolean, including the literal value `0`.
+Passing the raw header to nginx would incorrectly treat that value as false
+for both [cache bypass](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_bypass)
+and [cache writes](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_no_cache).
+
+Run `python3 tests/test_nginx_snapshot_cache.py` on a host with nginx installed.
+It starts an isolated nginx and synthetic upstream, exercises warm-cache
+preconditions, a corpus switch, and an upstream outage, then removes its
+temporary processes and files. No production service or dataset is used.
+When applying `deploy/nginx-api.conf` to an existing host, preserve its other
+virtual hosts and CORS settings; validate with `nginx -t` before reloading.
+
 ---
 
 ## Shared concepts
