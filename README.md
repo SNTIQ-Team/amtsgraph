@@ -231,3 +231,13 @@ Results retain `place.ortk`, scoped caveats (including authority, municipality,
 district, matter and global scopes), and `assignments` identifying the exact
 register relation. These assignment records are distinct from an authority's
 homepage provenance. Register rows currently have no historical validity proof.
+
+### One research interface
+
+`GET /research?q=AsylbLG&ags=09177117&kind=asylblg_behoerde` combines the existing
+Lexgraph legal search and Amtsgraph assignment resolver. On production the path
+is `/v1/research`. Each component retains source metadata, ambiguity and failures;
+no new corpus copy or speculative statutory competence edge is created. Exact
+historical text uses `act_id`, optional `norm`, `at` and timezone-aware `known_at`.
+Historical authority resolution is explicitly unsupported. The pure `research`
+operation is the intended boundary for a later MCP/Skill adapter.

@@ -63,7 +63,7 @@ def capabilities():
     return {"schema_version": 1, "service": "amtsgraph",
             "temporal": "current_only", "place_identity": ["plz", "ortk"],
             "ambiguity": "candidates", "assignment_evidence": "register_record",
-            "operations": ["resolve/court", "resolve/authority", "authorities"]}
+            "operations": ["resolve/court", "resolve/authority", "authorities", "research"]}
 
 
 COURT_KINDS = {"amtsgericht", "landgericht", "oberlandesgericht",
@@ -528,3 +528,7 @@ def authority_detail(authority_id: int):
     card["related_incoming"] = [dict(e) for e in incoming]
     card["caveats"] = caveats_for(conn, [("authority", str(authority_id))])
     return card
+
+# One read-only domain interface over the existing institutional and law stores.
+from api.research import create_research_router  # noqa: E402
+app.include_router(create_research_router(resolve_court, resolve_authority))
