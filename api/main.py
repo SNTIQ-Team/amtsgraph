@@ -26,14 +26,45 @@ import unicodedata
 from functools import wraps
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import Response
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import Response, JSONResponse
 
 # Deployment override: AMTSGRAPH_DB=/path/to/atlas.db (default: repo layout)
 DB_PATH = Path(os.environ.get(
     "AMTSGRAPH_DB",
     Path(__file__).resolve().parent.parent / "data" / "atlas.db"))
 app = FastAPI(title="Amtsgraph", version="2.2")
+
+# Current register resolution has no historical assignment intervals. Reject
+# ignored constraints at transport; the same resolver remains callable in batch.
+@app.middleware("http")
+async def resolution_contract(request: Request, call_next):
+    route_path = request.url.path
+    root_path = request.scope.get("root_path", "")
+    if root_path and route_path.startswith(root_path + "/"):
+        route_path = route_path[len(root_path):]
+    allowed = {"/resolve/court": {"plz", "matter", "ort", "ortk"},
+               "/resolve/authority": {"ags", "kind"}}
+    names = allowed.get(route_path)
+    if names is not None:
+        unsupported = sorted(set(request.query_params) - names)
+        repeated = sorted(k for k in request.query_params if len(request.query_params.getlist(k)) > 1)
+        if unsupported or repeated:
+            temporal = bool(set(unsupported) & {"at", "as_of", "valid_at", "known_at"})
+            return JSONResponse(status_code=422, content={
+                "status": "unsupported_temporal_request" if temporal else "invalid_request",
+                "unsupported_arguments": unsupported, "repeated_arguments": repeated,
+                "temporal": "current_only"})
+    return await call_next(request)
+
+
+@app.get("/capabilities")
+def capabilities():
+    return {"schema_version": 1, "service": "amtsgraph",
+            "temporal": "current_only", "place_identity": ["plz", "ortk"],
+            "ambiguity": "candidates", "assignment_evidence": "register_record",
+            "operations": ["resolve/court", "resolve/authority", "authorities"]}
+
 
 COURT_KINDS = {"amtsgericht", "landgericht", "oberlandesgericht",
                "sozialgericht", "verwaltungsgericht", "arbeitsgericht",
@@ -55,14 +86,22 @@ def normalize(name: str) -> str:
 
 
 def caveats_for(conn, scopes: list[tuple[str, str]], matter: str | None = None):
-    rows = []
-    for level, key in scopes:
-        rows += conn.execute(
-            """SELECT severity, text_de, source FROM caveat
-               WHERE scope_level = ? AND scope_key = ?
-                 AND (matter IS NULL OR matter = ?)""",
-            (level, key, matter)).fetchall()
-    return [dict(r) for r in rows]
+    rows = {}
+    for level, key in sorted(set(scopes) | {("global", "*")}):
+        for row in conn.execute(
+            """SELECT id, scope_level, scope_key, matter, severity, text_de, source
+               FROM caveat WHERE scope_level = ?
+                 AND (scope_key = ? OR scope_level = 'global')
+                 AND (matter IS NULL OR matter = ?)""", (level, key, matter)):
+            rows[row["id"]] = dict(row)
+    return [rows[key] for key in sorted(rows)]
+
+
+def geographic_scopes(conn, ags):
+    if not ags:
+        return []
+    g = conn.execute("SELECT kreis_ags FROM gemeinde WHERE ags = ?", (ags,)).fetchone()
+    return [("gemeinde", ags)] + ([("kreis", g["kreis_ags"])] if g else [])
 
 
 def authority_card(conn, authority_id: int) -> dict:
@@ -373,18 +412,21 @@ def matters():
 # ---------------------------------------------------------------- courts
 
 @app.get("/resolve/court")
-def resolve_court(plz: str, matter: str, ort: str | None = None):
+def resolve_court(plz: str, matter: str, ort: str | None = None,
+                  ortk: str | None = None):
     conn = db()
     places = conn.execute(
         "SELECT * FROM jz_place WHERE plz = ?" +
-        (" AND ort_norm = ?" if ort else ""),
-        (plz, normalize(ort)) if ort else (plz,)).fetchall()
+        (" AND ort_norm = ?" if ort else "") +
+        (" AND ortk = ?" if ortk else ""),
+        (plz, *([normalize(ort)] if ort else []), *([ortk] if ortk else []))).fetchall()
     if not places:
         raise HTTPException(404, f"unknown PLZ {plz}")
-    if len({p["ortk"] for p in places}) > 1 and not ort:
-        # one PLZ, several Orte in different court districts: must pick Ort
-        return {"needs_ort": True,
-                "options": [{"ort": p["ort"], "ortk": p["ortk"]} for p in places]}
+    if len(places) != 1:
+        return {"status": "ambiguous_identity", "needs_ort": True,
+                "temporal": "current_only",
+                "options": [{"plz": p["plz"], "ort": p["ort"], "ortk": p["ortk"]}
+                            for p in sorted(places, key=lambda p: p["ortk"])]}
 
     place = places[0]
     chain = conn.execute(
@@ -397,14 +439,21 @@ def resolve_court(plz: str, matter: str, ort: str | None = None):
         raise HTTPException(404, f"no chain for matter '{matter}' at this place")
 
     return {
-        "place": {"plz": place["plz"], "ort": place["ort"]},
+        "status": "ok", "temporal": "current_only",
+        "place": {"plz": place["plz"], "ort": place["ort"], "ortk": place["ortk"]},
+        "assignments": [{"authority_id": c["authority_id"], "matter": matter,
+                         "place": {"plz": plz, "ortk": place["ortk"]},
+                         "position": c["position"], "role": c["role"],
+                         "evidence": {"type": "register_record", "table": "court_chain", "temporal": "current_only"}}
+                        for c in chain],
         "matter": matter,
         "chain": [{"position": c["position"], "role": c["role"],
                    "note": c["note"],
                    **authority_card(conn, c["authority_id"])} for c in chain],
-        "caveats": caveats_for(conn, [("plz", plz),
-                                      ("jz_place", f"{plz}|{place['ortk']}")],
-                               matter),
+        "caveats": caveats_for(conn, [("plz", plz), ("matter", matter),
+                                      ("jz_place", f"{plz}|{place['ortk']}")]
+                               + geographic_scopes(conn, place["gemeinde_ags"])
+                               + [("authority", str(c["authority_id"])) for c in chain], matter),
     }
 
 
@@ -435,12 +484,26 @@ def resolve_authority(ags: str, kind: str):
     primary = [h for h in hits if h["rank"] == 0]
     supervisory = [h for h in hits if h["rank"] > 0]
     cards = [authority_card(conn, h["id"]) for h in primary]
-    return {"gemeinde": g["name_simple"], "kind": kind,
+    assignments = conn.execute(
+        """SELECT c.authority_id, c.kind, c.level, c.area, c.rank
+           FROM competence c JOIN authority a ON a.id=c.authority_id
+           WHERE c.kind=? AND a.valid_to IS NULL AND (
+             (c.level='gemeinde' AND c.area=?) OR (c.level='kreis' AND c.area=?)
+             OR (c.level='land' AND c.area=?) OR (c.level='plz' AND c.area IN
+             (SELECT plz FROM gemeinde_plz WHERE ags=?)))
+           ORDER BY c.rank,c.authority_id,c.level,c.area""",
+        (kind, ags, g["kreis_ags"], ags[:2], ags)).fetchall()
+    return {"status": "ok" if len(cards) == 1 else "ambiguous_identity" if cards else "no_primary_assignment",
+            "temporal": "current_only", "ags": ags,
+            "assignments": [{**dict(row), "evidence": {"type": "register_record", "table": "competence", "temporal": "current_only"}} for row in assignments],
+            "gemeinde": g["name_simple"], "kind": kind,
             "resolved": cards[0] if len(cards) == 1 else None,
             "candidates": cards if len(cards) > 1 else [],
             "supervisory": [authority_card(conn, h["id"])
                             for h in supervisory],
-            "caveats": caveats_for(conn, [("gemeinde", ags)])}
+            "caveats": caveats_for(conn, geographic_scopes(conn, ags)
+                       + [("authority", str(h["id"])) for h in hits]
+                       + [("plz", r[0]) for r in conn.execute("SELECT plz FROM gemeinde_plz WHERE ags=?", (ags,))], kind)}
 
 
 @app.get("/authorities/{authority_id}")

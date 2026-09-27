@@ -220,3 +220,14 @@ Dual-licensed **by audience** — see [LICENSING.md](LICENSING.md):
 Built by [SNTIQ](https://sntiq.com/) — infrastructure for navigating
 large bureaucratic systems. 50+ supported proceedings, documented
 administrative-practice changes in German municipalities.
+
+### Resolver evidence contract
+
+`GET /capabilities` declares current-register resolution. Historical `at`,
+`valid_at`, `known_at` and unknown/repeated resolver parameters return HTTP 422.
+For courts, use both `plz` and `ortk` from the candidate list when a place is
+ambiguous; a display-name filter never authorizes selecting the first row.
+Results retain `place.ortk`, scoped caveats (including authority, municipality,
+district, matter and global scopes), and `assignments` identifying the exact
+register relation. These assignment records are distinct from an authority's
+homepage provenance. Register rows currently have no historical validity proof.
