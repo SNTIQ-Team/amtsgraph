@@ -1,20 +1,24 @@
-"""Amtsgraph — resolution API (matter-aware).
+"""Amtsgraph — resolution API (matter-aware, evidence-carrying).
 
-Endpoints (see docs/ARCHITECTURE.md):
+Identity and competence operations (see docs/API.md, "Evidence envelope"):
 
-  GET /places?q=neustadt
-      place candidates with Land/Kreis context (disambiguation picker)
-  GET /matters
-      legal-matter taxonomy for the court flow
-  GET /resolve/court?plz=10115&ort=Berlin&matter=mahn
-      exact instance chain for place x matter, with caveats + provenance
-  GET /resolve/authority?ags=10041100&kind=auslaenderbehoerde
-      competent non-court authority for a Gemeinde
+  GET /resolve/place?purpose=court&q=54636
+      stable place ids (place:jz:<PLZ>:<ORTK> / place:ags:<AGS>) or explicit
+      ambiguity — never the first database row
+  GET /resolve/competence?place_id=place:jz:10115:BERLIN&matter=zivil
+  GET /resolve/competence?place_id=place:ags:09162000&kind=jobcenter
+      the competent court/office with relation-level evidence and every
+      applicable caveat (place, municipality, authority, matter, assignment)
+  GET /resolve/court?place_id=...&matter=sozial     (or plz[&ort][&ortk])
+      the register's instance chain for place x matter
+  GET /resolve/authority?place_id=place:ags:...&kind=...   (or ags)
   GET /authorities/{id}
-      full card + related edges
+      identity/contact card + graph edges (edges are not competence)
+  GET /courts, /courts/{court_id}, /courts/lookup, /courts/mapping
+      courts as first-class nodes: court id <-> name <-> XJustiz <-> ECLI
 
-Every answer carries `caveats` and `provenance`; clients must display both —
-for legal use an honest warning beats a confident wrong answer.
+Every competence answer is ``current_only``. Unknown, repeated or temporal
+query arguments are rejected (400) with their names, never ignored.
 """
 from __future__ import annotations
 
@@ -26,49 +30,22 @@ import unicodedata
 from functools import wraps
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import Response, JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import Response
+
+from api import competence as domain
+from api import courts as court_registry
+from api.contract import (HTTP_STATUS, STATUSES, TEMPORAL_SCOPE,
+                          check_snapshot, install, request_scope, respond,
+                          snapshot_info, strict_query)
 
 # Deployment override: AMTSGRAPH_DB=/path/to/atlas.db (default: repo layout)
 DB_PATH = Path(os.environ.get(
     "AMTSGRAPH_DB",
     Path(__file__).resolve().parent.parent / "data" / "atlas.db"))
-app = FastAPI(title="Amtsgraph", version="2.2")
-
-# Current register resolution has no historical assignment intervals. Reject
-# ignored constraints at transport; the same resolver remains callable in batch.
-@app.middleware("http")
-async def resolution_contract(request: Request, call_next):
-    route_path = request.url.path
-    root_path = request.scope.get("root_path", "")
-    if root_path and route_path.startswith(root_path + "/"):
-        route_path = route_path[len(root_path):]
-    allowed = {"/resolve/court": {"plz", "matter", "ort", "ortk"},
-               "/resolve/authority": {"ags", "kind"}}
-    names = allowed.get(route_path)
-    if names is not None:
-        unsupported = sorted(set(request.query_params) - names)
-        repeated = sorted(k for k in request.query_params if len(request.query_params.getlist(k)) > 1)
-        if unsupported or repeated:
-            temporal = bool(set(unsupported) & {"at", "as_of", "valid_at", "known_at"})
-            return JSONResponse(status_code=422, content={
-                "status": "unsupported_temporal_request" if temporal else "invalid_request",
-                "unsupported_arguments": unsupported, "repeated_arguments": repeated,
-                "temporal": "current_only"})
-    return await call_next(request)
-
-
-@app.get("/capabilities")
-def capabilities():
-    return {"schema_version": 1, "service": "amtsgraph",
-            "temporal": "current_only", "place_identity": ["plz", "ortk"],
-            "ambiguity": "candidates", "assignment_evidence": "register_record",
-            "operations": ["resolve/court", "resolve/authority", "authorities", "research"]}
-
-
-COURT_KINDS = {"amtsgericht", "landgericht", "oberlandesgericht",
-               "sozialgericht", "verwaltungsgericht", "arbeitsgericht",
-               "finanzgericht"}
+app = FastAPI(title="Amtsgraph", version="3.0",
+              dependencies=[Depends(strict_query)])
+install(app)
 
 
 def db() -> sqlite3.Connection:
@@ -85,36 +62,49 @@ def normalize(name: str) -> str:
     return s.split(",")[0].split("(")[0].strip()
 
 
-def caveats_for(conn, scopes: list[tuple[str, str]], matter: str | None = None):
-    rows = {}
-    for level, key in sorted(set(scopes) | {("global", "*")}):
-        for row in conn.execute(
-            """SELECT id, scope_level, scope_key, matter, severity, text_de, source
-               FROM caveat WHERE scope_level = ?
-                 AND (scope_key = ? OR scope_level = 'global')
-                 AND (matter IS NULL OR matter = ?)""", (level, key, matter)):
-            rows[row["id"]] = dict(row)
-    return [rows[key] for key in sorted(rows)]
+
+# Backwards-compatible alias: the card now lives with the domain operations.
+authority_card = domain.authority_card
+COURT_KINDS = domain.COURT_KINDS
 
 
-def geographic_scopes(conn, ags):
-    if not ags:
-        return []
-    g = conn.execute("SELECT kreis_ags FROM gemeinde WHERE ags = ?", (ags,)).fetchone()
-    return [("gemeinde", ags)] + ([("kreis", g["kreis_ags"])] if g else [])
-
-
-def authority_card(conn, authority_id: int) -> dict:
-    a = conn.execute("SELECT * FROM authority WHERE id = ?",
-                     (authority_id,)).fetchone()
-    ext = conn.execute(
-        "SELECT scheme, value FROM authority_external_id WHERE authority_id = ?",
-        (authority_id,)).fetchall()
-    card = {k: a[k] for k in a.keys() if not k.startswith("source")}
-    card["external_ids"] = {r["scheme"]: r["value"] for r in ext}
-    card["provenance"] = {"source": a["source"], "url": a["source_url"],
-                          "fetched_at": a["fetched_at"]}
-    return card
+@app.get("/capabilities")
+def capabilities():
+    return {
+        "schema_version": 2, "service": "amtsgraph",
+        "temporal": "current_only",
+        "temporal_scope": TEMPORAL_SCOPE,
+        "historical_arguments": "rejected with unsupported_temporal_request",
+        "unknown_arguments": "rejected with invalid_argument (HTTP 400)",
+        "snapshot_pinning": "snapshot_id argument; mismatch -> stale_snapshot",
+        "statuses": sorted(STATUSES),
+        "http_status": HTTP_STATUS,
+        "place_identity": {
+            "court_register_place": "place:jz:<PLZ>:<ORTK>",
+            "municipality": "place:ags:<AGS>",
+            "legacy_selectors": ["plz", "ort", "ortk", "ags"]},
+        "court_identity": {"de": "court:de:<XJustiz-ID>",
+                           "eu": "court:eu:<ECLI court code>"},
+        "ambiguity": "explicit candidates; nothing is selected implicitly",
+        "assignment_evidence": ["register_observation",
+                                "curated_source_review",
+                                "statutory_assignment",
+                                "official_publication"],
+        "caveat_scopes": ["place", "municipality", "district", "land",
+                          "matter", "authority", "court", "assignment",
+                          "global"],
+        "operations": {
+            "place_resolve": "/resolve/place",
+            "competence_resolve": "/resolve/competence",
+            "court_chain": "/resolve/court",
+            "authority_resolution": "/resolve/authority",
+            "authority_detail": "/authorities/{authority_id}",
+            "court_detail": "/courts/{court_id}",
+            "court_lookup": "/courts/lookup",
+            "court_mapping": "/courts/mapping",
+            "court_search": "/courts",
+            "research": "/research"},
+    }
 
 
 # --------------------------------------------------------------- service
@@ -130,13 +120,12 @@ def health():
 
 @app.get("/version")
 def version():
-    conn = db()
-    info = {r["key"]: r["value"] for r in
-            conn.execute("SELECT key, value FROM build_info")}
-    import json as _json
+    info = snapshot_info(db())
     return {"dataset": "Amtsgraph",
-            "built_at": info.get("built_at"),
-            "source_snapshots": _json.loads(info.get("snapshots", "{}"))}
+            "built_at": info["built_at"],
+            "snapshot_id": info["snapshot_id"],
+            "schema_version": info["schema_version"],
+            "source_snapshots": info["source_snapshots"]}
 
 
 @app.get("/stats")
@@ -156,6 +145,15 @@ def stats():
         "eu_edges": one("SELECT COUNT(*) FROM authority_edge "
                         "WHERE source='eu_curated'"),
         "caveats": one("SELECT COUNT(*) FROM caveat"),
+        # courts as nodes (codelist entries, incl. dissolved courts and
+        # departments) — distinct from the register cards counted above
+        **({"courts": one("SELECT COUNT(*) FROM court"),
+            "courts_active": one("SELECT COUNT(*) FROM court WHERE "
+                                 "status='active' AND unit_type='court'")}
+           if domain.has_table(conn, "court") else {}),
+        "counting_note": ("authorities_active counts every active node: "
+                          "offices, court register cards and organigram "
+                          "units (departments, sections)"),
     }
 
 
@@ -209,7 +207,10 @@ def search_places(q: str, limit: int = 10):
                 ORDER BY g.population IS NULL, g.population DESC, pq.plz
                 LIMIT ?""",
             (q, limit)).fetchall()
-        return {"query": q, "matches": [dict(r) for r in rows],
+        return {"query": q,
+                "matches": [{**dict(r),
+                             "place_id": domain.ags_place_id(r["ags"])}
+                            for r in rows],
                 "court_register_only": []}
 
     norm = normalize(q)
@@ -247,8 +248,12 @@ def search_places(q: str, limit: int = 10):
         """SELECT plz, ort, ortk FROM jz_place
            WHERE ort_norm LIKE ? || '%' AND gemeinde_ags IS NULL LIMIT ?""",
         (norm, limit)).fetchall()
+    for m in matches:
+        m["place_id"] = domain.ags_place_id(m["ags"])
     return {"query": q, "matches": matches,
-            "court_register_only": [dict(r) for r in extra]}
+            "court_register_only": [
+                {**dict(r), "place_id": domain.jz_place_id(r["plz"], r["ortk"])}
+                for r in extra]}
 
 
 _GRAPH_CACHE: dict | None = None
@@ -276,7 +281,10 @@ def _serialized(lock: threading.Lock):
 
 @app.get("/graph")
 @_serialized(_GRAPH_LOCK)
-def graph():
+def graph(v: str | None = Query(
+        None, max_length=16,
+        description="client cache-busting token (the sntiq.com viewer "
+                    "sends v=5); it selects nothing")):
     """Full authority graph for visual exploration: every ACTIVE
     authority plus every edge whose endpoints are active.
     Compact arrays (nodes: [id, kind, name], edges: [a, b, relation]);
@@ -394,6 +402,22 @@ def graph():
             ],
             "kreise": {r["ags"]: r["name"] for r in
                        conn.execute("SELECT ags, name FROM kreis")},
+            # paper §8.4: presentation heuristics stay presentation metadata
+            "node_fields": ["id", "kind", "name", "land", "kreis"],
+            "visualization_metadata": {
+                "fields": ["land", "kreis"],
+                "basis": ("display grouping inferred from competence areas, "
+                          "postal codes and propagation along graph edges"),
+                "legal_effect": False,
+                "note": ("not a statement of territorial competence; use "
+                         "/resolve/competence for assignments")},
+            "edge_semantics": {
+                "appeal": ("next instance in an observed register chain; "
+                           "not proof that an appeal is available"),
+                "parent": "organisational hierarchy, not competence",
+                "supervision": ("higher-level body inferred from unit "
+                                "titles (heuristic)"),
+                "legal_effect_verified": False},
         }
         _GRAPH_JSON = json.dumps(
             _GRAPH_CACHE, ensure_ascii=False,
@@ -409,126 +433,135 @@ def matters():
     return [dict(r) for r in rows]
 
 
+# ------------------------------------------------------------ identity
+
+SnapshotArg = Query(None, max_length=120,
+                    description="pin a snapshot_id; mismatch -> 409 "
+                                "stale_snapshot")
+
+
+@app.get("/resolve/place", name="place_resolve")
+def place_resolve(request: Request,
+                  purpose: str = Query(..., description="court | authority"),
+                  q: str | None = Query(None, max_length=200),
+                  plz: str | None = None, ort: str | None = None,
+                  ags: str | None = None,
+                  limit: int = Query(20, ge=1, le=100),
+                  snapshot_id: str | None = SnapshotArg):
+    conn = db()
+    snap = check_snapshot(conn, snapshot_id)
+    return respond(domain.place_resolve(
+        conn, purpose=purpose, q=q, plz=plz, ort=ort, ags=ags, limit=limit,
+        request_scope=request_scope(request), snapshot=snap))
+
+
+@app.get("/resolve/competence", name="competence_resolve")
+def competence_resolve(request: Request, place_id: str,
+                       matter: str | None = None, kind: str | None = None,
+                       snapshot_id: str | None = SnapshotArg):
+    conn = db()
+    snap = check_snapshot(conn, snapshot_id)
+    return respond(domain.competence_resolve(
+        conn, place_id=place_id, matter=matter, kind=kind,
+        request_scope=request_scope(request), snapshot=snap))
+
+
 # ---------------------------------------------------------------- courts
 
-@app.get("/resolve/court")
-def resolve_court(plz: str, matter: str, ort: str | None = None,
-                  ortk: str | None = None):
+def court_chain_result(*, matter: str, plz: str | None = None,
+                       ort: str | None = None, ortk: str | None = None,
+                       place_id: str | None = None,
+                       scope: dict | None = None,
+                       snapshot_id: str | None = None) -> dict:
+    """Domain call used by the REST route and by /research."""
     conn = db()
-    places = conn.execute(
-        "SELECT * FROM jz_place WHERE plz = ?" +
-        (" AND ort_norm = ?" if ort else "") +
-        (" AND ortk = ?" if ortk else ""),
-        (plz, *([normalize(ort)] if ort else []), *([ortk] if ortk else []))).fetchall()
-    if not places:
-        raise HTTPException(404, f"unknown PLZ {plz}")
-    if len(places) != 1:
-        return {"status": "ambiguous_identity", "needs_ort": True,
-                "temporal": "current_only",
-                "options": [{"plz": p["plz"], "ort": p["ort"], "ortk": p["ortk"]}
-                            for p in sorted(places, key=lambda p: p["ortk"])]}
+    snap = check_snapshot(conn, snapshot_id)
+    return domain.court_chain(conn, matter=matter, plz=plz, ort=ort,
+                              ortk=ortk, place_id=place_id,
+                              request_scope=scope or {}, snapshot=snap)
 
-    place = places[0]
-    chain = conn.execute(
-        """SELECT cc.position, cc.role, cc.note, cc.authority_id
-           FROM court_chain cc
-           WHERE cc.plz = ? AND cc.ortk = ? AND cc.matter = ?
-           ORDER BY cc.role DESC, cc.position""",
-        (place["plz"], place["ortk"], matter)).fetchall()
-    if not chain:
-        raise HTTPException(404, f"no chain for matter '{matter}' at this place")
 
-    return {
-        "status": "ok", "temporal": "current_only",
-        "place": {"plz": place["plz"], "ort": place["ort"], "ortk": place["ortk"]},
-        "assignments": [{"authority_id": c["authority_id"], "matter": matter,
-                         "place": {"plz": plz, "ortk": place["ortk"]},
-                         "position": c["position"], "role": c["role"],
-                         "evidence": {"type": "register_record", "table": "court_chain", "temporal": "current_only"}}
-                        for c in chain],
-        "matter": matter,
-        "chain": [{"position": c["position"], "role": c["role"],
-                   "note": c["note"],
-                   **authority_card(conn, c["authority_id"])} for c in chain],
-        "caveats": caveats_for(conn, [("plz", plz), ("matter", matter),
-                                      ("jz_place", f"{plz}|{place['ortk']}")]
-                               + geographic_scopes(conn, place["gemeinde_ags"])
-                               + [("authority", str(c["authority_id"])) for c in chain], matter),
-    }
+@app.get("/resolve/court", name="court_chain")
+def resolve_court(request: Request, matter: str, plz: str | None = None,
+                  ort: str | None = None, ortk: str | None = None,
+                  place_id: str | None = None,
+                  snapshot_id: str | None = SnapshotArg):
+    return respond(court_chain_result(
+        matter=matter, plz=plz, ort=ort, ortk=ortk, place_id=place_id,
+        scope=request_scope(request), snapshot_id=snapshot_id))
 
 
 # ----------------------------------------------------------- non-courts
 
-@app.get("/resolve/authority")
-def resolve_authority(ags: str, kind: str):
+def authority_result(*, kind: str, ags: str | None = None,
+                     place_id: str | None = None, scope: dict | None = None,
+                     snapshot_id: str | None = None) -> dict:
     conn = db()
-    if kind in COURT_KINDS:
-        raise HTTPException(400, "court kinds resolve via /resolve/court "
-                            "(competence is matter-specific)")
-    g = conn.execute("SELECT * FROM gemeinde WHERE ags = ?", (ags,)).fetchone()
-    if not g:
-        raise HTTPException(404, "unknown AGS")
-    hits = conn.execute(
-        """SELECT a.id, MIN(c.rank) AS rank FROM authority a
-           JOIN competence c ON c.authority_id = a.id
-           WHERE c.kind = ? AND a.valid_to IS NULL AND (
-                 (c.level='gemeinde' AND c.area = ?)
-              OR (c.level='kreis'    AND c.area = ?)
-              OR (c.level='land'     AND c.area = ?)
-              OR (c.level='plz' AND c.area IN
-                    (SELECT plz FROM gemeinde_plz WHERE ags = ?)))
-           GROUP BY a.id ORDER BY rank, a.id""",
-        (kind, ags, g["kreis_ags"], ags[:2], ags)).fetchall()
-    if not hits:
-        raise HTTPException(404, f"no {kind} known for {ags}")
-    primary = [h for h in hits if h["rank"] == 0]
-    supervisory = [h for h in hits if h["rank"] > 0]
-    cards = [authority_card(conn, h["id"]) for h in primary]
-    assignments = conn.execute(
-        """SELECT c.authority_id, c.kind, c.level, c.area, c.rank
-           FROM competence c JOIN authority a ON a.id=c.authority_id
-           WHERE c.kind=? AND a.valid_to IS NULL AND (
-             (c.level='gemeinde' AND c.area=?) OR (c.level='kreis' AND c.area=?)
-             OR (c.level='land' AND c.area=?) OR (c.level='plz' AND c.area IN
-             (SELECT plz FROM gemeinde_plz WHERE ags=?)))
-           ORDER BY c.rank,c.authority_id,c.level,c.area""",
-        (kind, ags, g["kreis_ags"], ags[:2], ags)).fetchall()
-    return {"status": "ok" if len(cards) == 1 else "ambiguous_identity" if cards else "no_primary_assignment",
-            "temporal": "current_only", "ags": ags,
-            "assignments": [{**dict(row), "evidence": {"type": "register_record", "table": "competence", "temporal": "current_only"}} for row in assignments],
-            "gemeinde": g["name_simple"], "kind": kind,
-            "resolved": cards[0] if len(cards) == 1 else None,
-            "candidates": cards if len(cards) > 1 else [],
-            "supervisory": [authority_card(conn, h["id"])
-                            for h in supervisory],
-            "caveats": caveats_for(conn, geographic_scopes(conn, ags)
-                       + [("authority", str(h["id"])) for h in hits]
-                       + [("plz", r[0]) for r in conn.execute("SELECT plz FROM gemeinde_plz WHERE ags=?", (ags,))], kind)}
+    snap = check_snapshot(conn, snapshot_id)
+    return domain.authority_resolution(
+        conn, kind=kind, ags=ags, place_id=place_id,
+        request_scope=scope or {}, snapshot=snap,
+        operation="authority_resolution")
 
 
-@app.get("/authorities/{authority_id}")
-def authority_detail(authority_id: int):
+@app.get("/resolve/authority", name="authority_resolution")
+def resolve_authority(request: Request, kind: str, ags: str | None = None,
+                      place_id: str | None = None,
+                      snapshot_id: str | None = SnapshotArg):
+    return respond(authority_result(
+        kind=kind, ags=ags, place_id=place_id, scope=request_scope(request),
+        snapshot_id=snapshot_id))
+
+
+@app.get("/authorities/{authority_id}", name="authority_detail")
+def authority_detail(request: Request, authority_id: int,
+                     snapshot_id: str | None = SnapshotArg):
     conn = db()
-    if not conn.execute("SELECT 1 FROM authority WHERE id = ?",
-                        (authority_id,)).fetchone():
-        raise HTTPException(404)
-    card = authority_card(conn, authority_id)
-    edges = conn.execute(
-        """SELECT e.relation, e.matter, e.note, e.source, e.source_url,
-                  a2.id, a2.name, a2.kind
-           FROM authority_edge e JOIN authority a2 ON a2.id = e.to_authority
-           WHERE e.from_authority = ?""", (authority_id,)).fetchall()
-    card["related"] = [dict(e) for e in edges]
-    incoming = conn.execute(
-        """SELECT e.relation, e.matter, e.note, e.source, e.source_url,
-                  a2.id, a2.name, a2.kind
-           FROM authority_edge e
-           JOIN authority a2 ON a2.id = e.from_authority
-           WHERE e.to_authority = ?""", (authority_id,)).fetchall()
-    card["related_incoming"] = [dict(e) for e in incoming]
-    card["caveats"] = caveats_for(conn, [("authority", str(authority_id))])
-    return card
+    snap = check_snapshot(conn, snapshot_id)
+    return respond(domain.authority_detail(
+        conn, authority_id, request_scope=request_scope(request),
+        snapshot=snap))
+
+
+# ------------------------------------------------------- court registry
+
+@app.get("/courts", name="court_search")
+def courts(request: Request, q: str | None = Query(None, max_length=200),
+           kind: str | None = None, land: str | None = None,
+           level: str | None = None, status: str | None = None,
+           limit: int = Query(50, ge=1, le=200),
+           offset: int = Query(0, ge=0)):
+    return respond(court_registry.court_search(
+        db(), q=q, kind=kind, land=land, level=level, status=status,
+        limit=limit, offset=offset, request_scope=request_scope(request)))
+
+
+@app.get("/courts/mapping", name="court_mapping")
+def courts_mapping(request: Request, limit: int = Query(5000, ge=1, le=5000),
+                   offset: int = Query(0, ge=0)):
+    return respond(court_registry.court_mapping(
+        db(), limit=limit, offset=offset,
+        request_scope=request_scope(request)))
+
+
+@app.get("/courts/lookup", name="court_lookup")
+def courts_lookup(request: Request,
+                  name: str | None = Query(None, max_length=200),
+                  ecli: str | None = Query(None, max_length=120),
+                  xjustiz: str | None = Query(None, max_length=12),
+                  authority_id: int | None = None, land: str | None = None):
+    return respond(court_registry.court_lookup(
+        db(), name=name, ecli=ecli, xjustiz=xjustiz,
+        authority_id=authority_id, land=land,
+        request_scope=request_scope(request)))
+
+
+@app.get("/courts/{court_id}", name="court_detail")
+def court_detail(request: Request, court_id: str):
+    return respond(court_registry.court_detail(
+        db(), court_id, request_scope=request_scope(request)))
+
 
 # One read-only domain interface over the existing institutional and law stores.
 from api.research import create_research_router  # noqa: E402
-app.include_router(create_research_router(resolve_court, resolve_authority))
+app.include_router(create_research_router(court_chain_result, authority_result))

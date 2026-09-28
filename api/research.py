@@ -9,6 +9,8 @@ from urllib.parse import urlencode, quote
 from urllib.request import urlopen
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from api.contract import ContractError
+
 LEXGRAPH = os.environ.get('LEXGRAPH_RESEARCH_URL', 'http://127.0.0.1:8002').rstrip('/')
 MAX_BYTES = 4 * 1024 * 1024
 ALLOWED = {'q', 'limit', 'plz', 'ortk', 'matter', 'ags', 'kind', 'act_id', 'norm', 'at', 'known_at'}
@@ -56,6 +58,8 @@ def component(call):
         value = call()
         status = value.get('status', 'ok')
         return {'status': status, 'data': value}
+    except ContractError as exc:
+        return {'status': 'unavailable', 'reason': exc.status, 'detail': exc.message}
     except HTTPException as exc:
         return {'status': 'unavailable', 'reason': 'not_in_corpus' if exc.status_code == 404 else 'invalid_request', 'http_status': exc.status_code}
 

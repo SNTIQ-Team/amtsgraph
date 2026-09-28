@@ -242,6 +242,33 @@ def check(db: sqlite3.Connection) -> list[str]:
         errors.append(f"{n} active authorities serve no area, "
                       f"e.g. {[r[1] for r in rows]}")
 
+    # ---- relation-level provenance ---------------------------------------
+    # every competence assignment must say where it was observed and when;
+    # an assignment without its own evidence cannot be served as a relation
+    columns = {r[1] for r in q(db, "PRAGMA table_info(competence)")}
+    if pvog_loaded and {"source", "observed_on"} <= columns:
+        (n,) = q(db, """SELECT COUNT(*) FROM competence
+                        WHERE source IS NULL OR observed_on IS NULL""")[0]
+        if n:
+            errors.append(f"competence: {n} assignments without source/"
+                          f"observation date")
+
+    # ---- court nodes -------------------------------------------------------
+    # every register court card with an XJustiz code is joinable to a stable
+    # court node (decision corpora reference court ids, not authority rows)
+    tables = {r[0] for r in q(db, "SELECT name FROM sqlite_master "
+                                  "WHERE type='table'")}
+    if "court" in tables and has_rows(db, "court"):
+        (n,) = q(db, """
+            SELECT COUNT(DISTINCT e.value) FROM authority_external_id e
+            JOIN court_chain cc ON cc.authority_id = e.authority_id
+            WHERE e.scheme = 'xjustiz' AND cc.role = 'court'
+              AND NOT EXISTS (SELECT 1 FROM court_authority ca
+                              WHERE ca.authority_id = e.authority_id)""")[0]
+        if n:
+            errors.append(f"courts: {n} register court codes without a "
+                          f"court node")
+
     return errors
 
 

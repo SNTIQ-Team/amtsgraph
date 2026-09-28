@@ -223,14 +223,20 @@ administrative-practice changes in German municipalities.
 
 ### Resolver evidence contract
 
-`GET /capabilities` declares current-register resolution. Historical `at`,
-`valid_at`, `known_at` and unknown/repeated resolver parameters return HTTP 422.
-For courts, use both `plz` and `ortk` from the candidate list when a place is
-ambiguous; a display-name filter never authorizes selecting the first row.
-Results retain `place.ortk`, scoped caveats (including authority, municipality,
-district, matter and global scopes), and `assignments` identifying the exact
-register relation. These assignment records are distinct from an authority's
-homepage provenance. Register rows currently have no historical validity proof.
+`GET /capabilities` declares current-register resolution (`current_only`).
+Historical arguments (`at`, `as_of`, `valid_at`, `known_at`, …) return HTTP 400
+`unsupported_temporal_request`; unknown or repeated arguments return HTTP 400
+`invalid_argument` with their names. `/resolve/place` returns stable place ids
+(`place:jz:<PLZ>:<ORTK>`, `place:ags:<AGS>`) or explicit ambiguity, and the
+competence operations accept them; a display-name filter never authorizes
+selecting the first row. Answers use one evidence envelope (typed `status`,
+`request_scope`, `snapshot_id`, `searched`, `evidence`, `warnings`, `total`),
+aggregate caveats from place, municipality, district, Land, matter, authority,
+court and assignment scopes (expired ones are listed as inactive), and carry
+`assignments` with relation-level evidence: a register observation, a curated
+review and a statutory assignment are distinct evidence kinds. Courts are
+first-class nodes with stable ids `court:de:<XJustiz-ID>` mapped to official
+name and ECLI code (`/courts/mapping`). See docs/API.md, "Evidence envelope".
 
 ### One research interface
 

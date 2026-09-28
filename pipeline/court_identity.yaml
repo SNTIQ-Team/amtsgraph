@@ -1,0 +1,92 @@
+# Curated court identity facts that the GDS.Gerichte codelist does not carry.
+#
+# court_id scheme (build-stable, joinable with decision corpora):
+#   court:de:<XJustiz-ID>        German courts, XJustiz code from GDS.Gerichte
+#   court:eu:<ECLI court code>   Courts of the European Union
+#
+# ECLI court codes are listed ONLY where they are known. Land courts have no
+# entry here: their ECLI code stays NULL until a decision corpus observes it
+# (never guessed from the court name).
+meta:
+  verified_at: "2026-09-28"
+
+# First letter of a Land court's XJustiz code -> Land (AGS prefix).
+# Basis: the Oberlandesgericht codes in GDS.Gerichte (D2000 OLG München,
+# R2000 OLG Hamm, U1000 OLG Dresden, ...). Federal courts are coded inside
+# the Land where they sit (BAG Y6010 Erfurt) and are listed below.
+xjustiz_land_prefix:
+  X: "01"   # Schleswig-Holstein
+  K: "02"   # Hamburg
+  P: "03"   # Niedersachsen
+  H: "04"   # Bremen
+  R: "05"   # Nordrhein-Westfalen
+  M: "06"   # Hessen
+  T: "07"   # Rheinland-Pfalz
+  B: "08"   # Baden-Württemberg
+  D: "09"   # Bayern
+  V: "10"   # Saarland
+  F: "11"   # Berlin
+  G: "12"   # Brandenburg
+  N: "13"   # Mecklenburg-Vorpommern
+  U: "14"   # Sachsen
+  W: "15"   # Sachsen-Anhalt
+  Y: "16"   # Thüringen
+
+# Federal courts. `ecli` is the court segment of ECLI:DE:<code>:...; the
+# same abbreviation is the court type (gertyp) in the federal case-law portal
+# rechtsprechung-im-internet.de.
+federal_courts:
+  - xjustiz: B6232
+    short: BVerfG
+    kind: verfassungsgericht
+    ecli: BVerfG
+    ecli_basis: federal_portal_convention
+  - xjustiz: A1000
+    short: BGH
+    kind: bundesgericht
+    ecli: BGH
+    ecli_basis: federal_portal_convention
+  - xjustiz: U8572
+    short: BVerwG
+    kind: bundesgericht
+    ecli: BVerwG
+    # observed: ECLI:DE:BVerwG:2016:160316B1B19.16.0 (RII XML jb-WBRE201600193)
+    ecli_basis: observed_in_federal_portal_xml
+  - xjustiz: D6263
+    short: BFH
+    kind: bundesgericht
+    ecli: BFH
+    ecli_basis: federal_portal_convention
+  - xjustiz: Y6010
+    short: BAG
+    kind: bundesgericht
+    ecli: BAG
+    ecli_basis: federal_portal_convention
+  - xjustiz: M6246
+    short: BSG
+    kind: bundesgericht
+    ecli: BSG
+    ecli_basis: federal_portal_convention
+  - xjustiz: D6261
+    short: BPatG
+    kind: bundesgericht
+    ecli: BPatG
+    ecli_basis: federal_portal_convention
+  - xjustiz: M6091
+    short: null
+    kind: bundesgericht
+    ecli: null
+    ecli_basis: null
+
+federal_ecli_source_url: "https://www.rechtsprechung-im-internet.de/"
+
+# Courts of the European Union: matched to the curated EU overlay by its
+# eu_official id. ECLI:EU:C:... = Court of Justice, ECLI:EU:T:... = General
+# Court.
+eu_courts:
+  - eu_official: CJEU-CJ
+    ecli: C
+    short: EuGH
+  - eu_official: CJEU-GC
+    ecli: T
+    short: EuG

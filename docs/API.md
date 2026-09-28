@@ -56,6 +56,170 @@ virtual hosts and CORS settings; validate with `nginx -t` before reloading.
 
 ---
 
+## Evidence envelope and stable identities (API 3.0)
+
+The operations an agent relies on — `place_resolve`, `competence_resolve`,
+`court_chain`, `authority_resolution`, `authority_detail` and the court
+registry — answer with one envelope. The legacy fields the web viewer reads
+(`chain`, `caveats`, `resolved`, `candidates`, `supervisory`, `needs_ort`,
+`options`, …) are kept next to it.
+
+```json
+{
+  "schema_version": 2,
+  "operation": "court_chain",
+  "status": "ok",
+  "request_scope": {"place_id": "place:jz:10115:BERLIN", "matter": "zivil"},
+  "applied_constraints": {"place_id": "place:jz:10115:BERLIN", "matter": "zivil"},
+  "ignored_arguments": [],
+  "snapshot_id": "amtsgraph-20260928T072529Z-dd16a74face0",
+  "temporal": "current_only",
+  "temporal_scope": {"mode": "current_only", "historical_supported": false, "basis": "…"},
+  "searched": [{"source": "court_chain (justizadressen register observation)", "status": "ok", "count": 5}],
+  "evidence": [{"kind": "register_observation", "observed_on": "2026-06-10", "source_url": "https://www.justizadressen.nrw.de/de/justiz/gericht?plz=10115&ort=Berlin&ang=zivil", "…": "…"}],
+  "warnings": ["[warn] …", "Register observation only: no statutory basis …"],
+  "failed_components": [],
+  "total": 5,
+  "…operation payload…": "…"
+}
+```
+
+### Status vocabulary
+
+| `status` | HTTP | Meaning |
+|---|---|---|
+| `ok` | 200 | Exactly the requested identity, fully served. |
+| `partial` | 200 | Served with a gap (e.g. `reason: no_primary_assignment` — only supervisory bodies known). |
+| `ambiguous_identity` | 200 | Several candidates (`candidates` / `options`); nothing is selected implicitly. `ambiguity` says whether the place or the competent authority is ambiguous. |
+| `not_found_in_searched_scope` | 404 | The complete search of the listed `searched` sources found nothing. Register-gap caveats are still returned. |
+| `not_in_corpus` | 404 | The identifier (authority id, court id) is unknown to this build. |
+| `invalid_argument` | 400 | Unknown, repeated, missing or malformed arguments — named in `unknown_arguments`, `repeated_arguments`, `missing_arguments`, `invalid_arguments`. |
+| `unsupported_temporal_request` | 400 | A date/history argument (`at`, `as_of`, `valid_at`, `known_at`, …). The resolver is `current_only`; dates are rejected, never ignored. |
+| `stale_snapshot` | 409 | `snapshot_id=` pins a build that is not the one served (`current_snapshot_id` is returned). |
+| `unavailable` | 503 | A store the operation needs is absent (`failed_components`). |
+
+Every route rejects undeclared query arguments with HTTP 400 and their
+names (also behind the `/v1` and `/amtsgraph` prefixes). `total` is `0` only
+after a complete search; it is `null` when nothing was counted.
+
+### Identities
+
+| Id | Meaning | Stable across builds |
+|---|---|---|
+| `place:jz:<PLZ>:<ORTK>` | a place of the official court register — the unit of **court** competence | yes (register key) |
+| `place:ags:<AGS>` | a municipality — the unit of **office** competence | yes (official key) |
+| `court:de:<XJustiz-ID>` | a German court (GDS.Gerichte codelist) | yes (official code) |
+| `court:eu:<ECLI court code>` | a court of the EU (`C`, `T`) | yes |
+| `authority_id` (integer) | an Amtsgraph row | **no** — local to one build |
+
+### `GET /resolve/place` — `place_resolve`
+
+| Param | Notes |
+|---|---|
+| `purpose` | required: `court` (returns `place:jz:…`) or `authority` (returns `place:ags:…`) |
+| `q` | a PLZ, `"PLZ Ort"`, or a name (exact normalized match, else prefix) |
+| `plz`, `ort` | structured alternative to `q`; `ort` only narrows a `plz` |
+| `ags` | `purpose=authority` only |
+| `limit` | 1–100, default 20; `truncated` and `total` show what was cut |
+
+`status: ok` → `place_id` + `place`; `ambiguous_identity` → `candidates`
+(each with `place_id`; court places carry `municipality_id` with
+`municipality_link_basis: plz_and_name_match` where the build could link
+them). A place name never selects one of several register places.
+
+### `GET /resolve/competence` — `competence_resolve`
+
+`place_id` plus exactly one of `matter` (court matter, needs a `place:jz:`
+id) or `kind` (office kind, needs a `place:ags:` id). Court answers are the
+`court_chain` payload with `subject: court_matter` and `resolved` = the
+first-instance court; office answers are the `authority_resolution` payload
+with `subject: authority_kind`.
+
+### `GET /resolve/court` — `court_chain`
+
+Accepts `place_id` **or** the legacy selectors `plz` [+ `ort`] [+ `ortk`]
+(never both). An ambiguous place returns `options`/`candidates` with
+`place_id`s (`needs_place_id: true`; `needs_ort: true` is kept for older
+clients). An unknown matter is `invalid_argument`; a place without a register
+chain for the matter is `not_found_in_searched_scope` **with** its caveats
+(the register-gap caveat used to be dropped with the bare 404). Every chain
+entry carries `court_id` and `assignment_id`.
+
+### Assignments — relation-level evidence
+
+`assignments[]` describes the competence relation itself, not the entity:
+
+| Field | Content |
+|---|---|
+| `assignment_id` | `assignment:court:<PLZ>:<ORTK>:<matter>:<role>:<position>` or `assignment:competence:<authority_id>:<kind>:<level>:<area>` |
+| `relation`, `function` | `competent_for`; `first_instance_listed`, `higher_instance_listed`, `prosecution_listed`, `primary_office`, `higher_level_or_supervisory` |
+| `matter`, `territory`, `conditions` | matter code/label, place or area, register notes (e.g. "Kammer für Handelssachen ist eingerichtet.") |
+| `temporal` | `current_only`; `valid_from`/`valid_until_exclusive` are `null` with `interval_status: not_recorded`; `observed_on` is the register snapshot day |
+| `assignment_basis` | `observed` (register states it), `inferred` (see `derivations`: e.g. `bayernportal_department_name_classification`, `asylblg_title_filter`), `curated` (manual override with `review_due`) |
+| `exceptions` | the aggregated caveats that target this assignment, its authority or its court |
+| `unresolved_facts` | what the evidence does not settle (case facts, AG/LG by value in `zivil`, **appeal availability** for higher instances) |
+| `evidence[]` | typed items: `register_observation` (register, `observed_on`, reproducible `source_url`/query, `record_locator`, `does_not_establish`), `curated_source_review`, `statutory_assignment`, `official_publication` |
+| `statutory_basis` | `{status: not_recorded}` unless curated statutory evidence (`pipeline/assignment_evidence.yaml`) matches; it is listed **next to** the register observation, never instead of it |
+
+`legal_effect_verified` is `false` throughout: an observation that a
+register listed a court is not a verified legal conclusion.
+
+### Caveat aggregation
+
+Each answer aggregates caveats of every applicable scope — place
+(`jz_place`, `plz`), municipality (`gemeinde`), district (`kreis`), `land`,
+`matter`, every `authority` and `court` in the answer, every `assignment`, and
+`global` — deduplicated, with `applies_via` naming the scope and role. A
+caveat narrowed to a matter or office kind applies only to that matter/kind.
+Caveats outside their validity interval move to `inactive_caveats`
+(`inactive_reason: expired | not_yet_valid`). `critical_warning` is one line
+with every active `block`/`warn` caveat; `warnings` lists all active caveats.
+`/authorities/{id}` shows the entity's caveats of all matters.
+
+### Courts — `/courts`, `/courts/{court_id}`, `/courts/lookup`, `/courts/mapping`
+
+Mapping record (bulk: `GET /courts/mapping?limit=5000&offset=0`):
+
+```json
+{
+  "court_id": "court:de:A1000",
+  "official_name": "Bundesgerichtshof Karlsruhe",
+  "xjustiz_id": "A1000",
+  "ecli_court_code": "BGH", "ecli_prefix": "ECLI:DE:BGH:", "ecli_status": "known",
+  "ecli_basis": "federal_portal_convention",
+  "jurisdiction": "DE", "level": "federal", "land_code": null, "kind": "bundesgericht",
+  "status": "active", "unit_type": "court", "parent_court_id": null,
+  "aliases": [{"alias": "BGH", "alias_type": "rii_gertyp"}],
+  "authority_ids": [],
+  "source": "xrepository:gds.gerichte", "observed_on": "2026-06-11"
+}
+```
+
+- Node set: all courts of the official GDS.Gerichte codelist (prosecutors,
+  prisons and other justice bodies are excluded), including dissolved courts
+  (`status: dissolved`) and departments (`unit_type: department`,
+  `parent_court_id`). Register codes missing from the codelist become nodes
+  with `source: justizadressen`.
+- `ecli_court_code` is known for the federal courts and the two EU courts.
+  Land court codes are `null` (`ecli_status: unknown`); they are never derived
+  from a name.
+- `authority_ids` link the register cards (contact data, court chains). They
+  are build-local; `court_id` is the durable join key for decision corpora
+  (decision fallback id: `court:de:<XJustiz>/<YYYY-MM-DD>/<first Az>`).
+- `GET /courts/lookup?name=BGH 9. Zivilsenat` → `court:de:A1000`; also
+  `ecli=`, `xjustiz=`, `authority_id=`, optional `land=`. Homonyms (two
+  `Amtsgericht Fürth`) are `ambiguous_identity`.
+
+### Display heuristics
+
+`/graph` node fields `land`/`kreis` are grouping inferred for display
+(`visualization_metadata.legal_effect: false`). Graph edges — including
+`appeal` edges derived from chain adjacency — carry no competence;
+`/authorities/{id}` marks each edge with `edge_basis` and
+`legal_effect_verified: false`.
+
+---
+
 # A) Production REST API — `https://api.sntiq.com/v1`
 
 JSON in, JSON out. CORS is enabled. All examples below use the base URL
@@ -76,9 +240,13 @@ variable (default: `<repo>/data/atlas.db`).
 | `GET /places?q=&limit=` | Place / PLZ typeahead search. |
 | `GET /matters` | Legal-matter catalog. |
 | `GET /graph` | Full authority graph export (compact arrays). |
-| **`GET /resolve/court?plz=&matter=&ort=`** | **Primary endpoint** — instance chain for a place × matter. |
-| `GET /resolve/authority?ags=&kind=` | Non-court authority resolution for a Gemeinde. |
-| `GET /authorities/{id}` | Full detail of one authority. |
+| `GET /capabilities` | Machine-readable contract (statuses, identities, current_only). |
+| `GET /resolve/place?purpose=&q=` | Stable place ids or explicit ambiguity. |
+| `GET /resolve/competence?place_id=&matter=\|kind=` | Competence with relation-level evidence and aggregated caveats. |
+| **`GET /resolve/court?place_id=\|plz=&matter=`** | **Primary endpoint** — instance chain for a place × matter. |
+| `GET /resolve/authority?place_id=\|ags=&kind=` | Non-court authority resolution for a Gemeinde. |
+| `GET /authorities/{id}` | Identity/contact card of one authority (+ court id). |
+| `GET /courts`, `/courts/{court_id}`, `/courts/lookup`, `/courts/mapping` | Courts as first-class nodes. |
 
 ---
 
@@ -388,8 +556,10 @@ is, for example: Staatsanwaltschaft Berlin → Generalstaatsanwaltschaft Berlin
 **Chain-row shape:** each row is `{position, role, note}` merged with the full
 **authority card** (see [Authority card](#authority-card)).
 
-Errors: `404` if the PLZ is unknown, or if no chain exists for that
-matter at the place.
+Errors (envelope, see "Status vocabulary"): `400 invalid_argument` for a
+malformed PLZ or an unknown matter; `404 not_found_in_searched_scope` if no
+register place matches, or if the register lists no chain for that matter at
+the place (the body still carries the place's caveats).
 
 ---
 
@@ -476,8 +646,11 @@ Response shape:
 | `supervisory` | Cards of superordinate / supervisory bodies (`rank > 0`). |
 | `caveats` | Gemeinde-scoped caveats. |
 
-Errors: `404` for an unknown AGS or when no authority of that kind is known;
-`400` for a court kind.
+Errors (envelope): `404 not_found_in_searched_scope` for an unknown AGS or
+when no authority of that kind is known; `400 invalid_argument` for a court
+kind or an unknown kind. Several rank-0 offices are `ambiguous_identity`
+(`ambiguity: competent_authority`); only supervisory bodies is `partial`
+(`reason: no_primary_assignment`).
 
 ---
 

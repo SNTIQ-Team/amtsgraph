@@ -1,0 +1,30 @@
+# Curated evidence for competence assignments that is NOT a register
+# observation (loaded into `assignment_evidence`).
+#
+# A statutory assignment (a norm that assigns a matter for a territory to a
+# court or office) and a register observation (what an official register
+# listed on a given day) are different evidence kinds. An entry here is
+# shown NEXT TO the register observation of a matching assignment; it never
+# replaces it, and it never upgrades `legal_effect_verified` by itself.
+#
+# Entry format:
+#   - evidence_kind: statutory_assignment      # | official_publication
+#     subject: court_matter                    # | authority_kind
+#     matter: mahn                             # court matter code / authority kind
+#     territory: { level: land, key: "09" }    # land|kreis|gemeinde|plz|jz_place
+#     court_id: court:de:D2601                 # optional: the assigned court
+#     norm_id: de/by/...                       # canonical norm id, if known
+#     citation: "§ ... <Verordnung> (GVBl. ...)"
+#     passage: "exact supporting text"         # optional; never paraphrased
+#     source_url: https://...
+#     observed_on: 2026-09-28
+#     valid_from: null                         # legal validity, if established
+#     valid_until_exclusive: null
+#     derived_by: user                         # user|parser|model
+#     legal_effect_verified: false
+#     note: null
+#
+# No entry has been reviewed yet: every assignment currently rests on a
+# register observation alone, and the API says so (statutory_basis.status =
+# "not_recorded").
+entries: []

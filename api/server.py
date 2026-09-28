@@ -44,9 +44,12 @@ SERVICE_INDEX = {
                 "docs": "/v1/docs",
                 "endpoints": [
                     "/v1/health", "/v1/version", "/v1/stats", "/v1/sources",
-                    "/v1/places", "/v1/graph", "/v1/matters",
-                    "/v1/resolve/court", "/v1/resolve/authority",
-                    "/v1/authorities/{id}",
+                    "/v1/capabilities", "/v1/places", "/v1/graph",
+                    "/v1/matters", "/v1/resolve/place",
+                    "/v1/resolve/competence", "/v1/resolve/court",
+                    "/v1/resolve/authority", "/v1/authorities/{id}",
+                    "/v1/courts", "/v1/courts/{court_id}",
+                    "/v1/courts/lookup", "/v1/courts/mapping",
                 ],
                 "dataset": "https://github.com/SNTIQ-Team/amtsgraph",
             },
@@ -66,9 +69,13 @@ SERVICE_INDEX = {
             "docs": "/amtsgraph/docs",
             "endpoints": [
                 "/amtsgraph/health", "/amtsgraph/version", "/amtsgraph/stats",
-                "/amtsgraph/sources", "/amtsgraph/places", "/amtsgraph/graph",
-                "/amtsgraph/matters", "/amtsgraph/resolve/court",
-                "/amtsgraph/resolve/authority", "/amtsgraph/authorities/{id}",
+                "/amtsgraph/sources", "/amtsgraph/capabilities",
+                "/amtsgraph/places", "/amtsgraph/graph", "/amtsgraph/matters",
+                "/amtsgraph/resolve/place", "/amtsgraph/resolve/competence",
+                "/amtsgraph/resolve/court", "/amtsgraph/resolve/authority",
+                "/amtsgraph/authorities/{id}", "/amtsgraph/courts",
+                "/amtsgraph/courts/{court_id}", "/amtsgraph/courts/lookup",
+                "/amtsgraph/courts/mapping",
             ],
             "legacy_prefix": "/v1",
             "dataset": "https://github.com/SNTIQ-Team/amtsgraph",
@@ -217,8 +224,7 @@ INDEX_HTML = """<!doctype html>
       <div class="status"><span class="dot"></span>live</div>
       <h2>Amtsgraph</h2>
       <p class="tagline">German authorities, court competences &amp; EU institutions</p>
-      <p class="desc">19,238 active nodes, 338,873 court-chain links,
-        11 sourced EU institutions/bodies/courts and matter-aware resolution.</p>
+      <p class="desc">__AMTSGRAPH_COUNTS__</p>
       <ul class="endpoints mono">
         <li>/amtsgraph/resolve/court</li>
         <li>/amtsgraph/resolve/authority</li>
@@ -236,8 +242,8 @@ INDEX_HTML = """<!doctype html>
       <h2>Lexgraph</h2>
       <p class="tagline">German &amp; EU legislation as event-sourced git</p>
       <p class="desc">Laws as repositories, amendments as commits, court
-        decisions linked to the norms they affect. 51 federal acts,
-        1,484 patch instructions and 7,934 in-force EU instruments indexed.</p>
+        decisions linked to the norms they affect. Current corpus counts:
+        <a href="/lex/stats">/lex/stats</a>.</p>
       <ul class="endpoints mono">
         <li>/lex/acts</li>
         <li>/lex/git</li>
@@ -303,12 +309,41 @@ server.add_middleware(
 )
 
 
+def amtsgraph_counts() -> str:
+    """Counts rendered from the served dataset, never hard-coded."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            one = lambda sql: conn.execute(sql).fetchone()[0]  # noqa: E731
+            nodes = one("SELECT COUNT(*) FROM authority WHERE valid_to IS NULL")
+            links = one("SELECT COUNT(*) FROM court_chain")
+            eu = one("SELECT COUNT(*) FROM authority WHERE valid_to IS NULL "
+                     "AND kind LIKE 'eu_%'")
+            built = one("SELECT value FROM build_info WHERE key='built_at'")
+            try:
+                courts = one("SELECT COUNT(*) FROM court WHERE status='active' "
+                             "AND unit_type='court'")
+            except sqlite3.Error:
+                courts = None
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return "Dataset counts are currently unavailable."
+    parts = [f"{nodes:,} active nodes", f"{links:,} court-chain links"]
+    if courts is not None:
+        parts.append(f"{courts:,} active courts with stable ids")
+    parts.append(f"{eu} sourced EU institutions/bodies/courts")
+    return (", ".join(parts) + f"; build {built[:10]}; current register "
+            f"competence only (no historical resolution).")
+
+
 @server.get("/")
 def index(request: Request):
     # Content negotiation: browsers get the landing page, everything else
     # (curl, scripts, monitors) keeps getting the JSON service index.
     if "text/html" in request.headers.get("accept", ""):
-        return HTMLResponse(INDEX_HTML)
+        return HTMLResponse(INDEX_HTML.replace("__AMTSGRAPH_COUNTS__",
+                                              amtsgraph_counts()))
     return SERVICE_INDEX
 
 

@@ -25,6 +25,9 @@ from common import ROOT, latest_snapshot, normalize_name, read_jsonl
 DB_PATH = ROOT / "data" / "atlas.db"
 SCHEMA = ROOT / "db" / "schema.sql"
 EU_OVERLAY = ROOT / "pipeline" / "eu_institutions.yaml"
+COURT_IDENTITY = ROOT / "pipeline" / "court_identity.yaml"
+ASSIGNMENT_EVIDENCE = ROOT / "pipeline" / "assignment_evidence.yaml"
+SCHEMA_VERSION = "2"
 
 KIND_BY_NAME = [  # order matters: first match wins
     ("generalstaatsanwaltschaft", "generalstaatsanwaltschaft"),
@@ -64,6 +67,31 @@ def court_kind(name: str) -> str:
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+BA_REGISTER_URL = ("https://statistik.arbeitsagentur.de/ Gebietsstruktur "
+                   "Grundsicherungstraeger")
+
+
+def insert_competence(db: sqlite3.Connection, authority_id: int, kind: str,
+                      level: str, area: str, rank: int = 0, *,
+                      source: str, observed_on: str,
+                      source_ref: str | None = None,
+                      source_url: str | None = None,
+                      derivation: str | None = None,
+                      review_due: str | None = None) -> None:
+    """One competence assignment WITH its own provenance.
+
+    The first writer of an (authority, kind, level, area) row wins, exactly
+    like the former positional ``INSERT OR IGNORE``.
+    """
+    db.execute(
+        """INSERT OR IGNORE INTO competence
+             (authority_id, kind, level, area, rank, source, observed_on,
+              source_ref, source_url, derivation, review_due)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (authority_id, kind, level, area, rank, source, observed_on,
+         source_ref, source_url, derivation, review_due))
 
 
 # ----------------------------------------------------------------- loaders
@@ -174,7 +202,8 @@ def load_justiz(db: sqlite3.Connection, snap: Path):
              card.get("address"), None, None, card.get("postal_address"),
              card.get("phone"), card.get("fax"), card.get("email"),
              card.get("web"), card.get("erv_note"),
-             "justizadressen", src_url, now()))
+             # the register was observed on the snapshot day, not at build
+             "justizadressen", src_url, snap.name))
         aid = cur.lastrowid
         if xj:
             auth_by_xj[key] = aid
@@ -290,7 +319,8 @@ def load_pvog(db: sqlite3.Connection, snap: Path):
              addr.get("street"), addr.get("zip"), addr.get("city"), postal,
              comms.get("Telefon"), comms.get("Fax"), comms.get("E-Mail"), web,
              hours, geo.get("latitude"), geo.get("longitude"),
-             "pvog", f"pvog:organisationunit:{oe}", now(), d.get("lastUpdate")))
+             "pvog", f"pvog:organisationunit:{oe}", snap.name,
+             d.get("lastUpdate")))
         auth_by_oe[oe] = cur.lastrowid
         db.execute("INSERT OR IGNORE INTO authority_external_id VALUES (?,?,?)",
                    (cur.lastrowid, "pvog_oe", oe))
@@ -358,14 +388,18 @@ def load_pvog(db: sqlite3.Connection, snap: Path):
     ambiguous: dict[tuple[str, str], int] = {}
     n = 0
 
-    def insert_comp(c: dict, rank: int = 0):
+    def insert_comp(c: dict, rank: int = 0, derivation: str | None = None):
         nonlocal n
         aid = auth_by_oe.get(c["oe_id"])
         if not aid:
             return None
-        db.execute(
-            "INSERT OR IGNORE INTO competence VALUES (?,?,'gemeinde',?,?)",
-            (aid, c["kind"], c["ags"], rank))
+        # the observation is (service description lb_id) x (ARS) -> OE
+        insert_competence(
+            db, aid, c["kind"], "gemeinde", c["ags"], rank,
+            source="pvog", observed_on=snap.name,
+            source_ref=f"{c.get('lb_id') or '?'}@{c.get('ars') or c['ags']}",
+            source_url=f"pvog:organisationunit:{c['oe_id']}",
+            derivation=derivation)
         kinds_assigned.setdefault(aid, set()).add(c["kind"])
         n += 1
         return aid
@@ -375,8 +409,12 @@ def load_pvog(db: sqlite3.Connection, snap: Path):
         insert_comp(c)
     for (ags, kind), cands in by_ak.items():
         local, ober, is_ambiguous = asyl_filter(cands)
-        local_ids = [a for c in local if (a := insert_comp(c, rank=0))]
-        ober_ids = [a for c in ober if (a := insert_comp(c, rank=1))]
+        # the AsylbLG candidate set is filtered and ranked by unit TITLE
+        # patterns: an inference, recorded on the relation itself
+        local_ids = [a for c in local if (a := insert_comp(
+            c, rank=0, derivation="asylblg_title_filter"))]
+        ober_ids = [a for c in ober if (a := insert_comp(
+            c, rank=1, derivation="asylblg_title_filter_higher_level"))]
         for lo in local_ids:
             for ob in ober_ids:
                 supervision_edges.add((lo, ob))
@@ -405,8 +443,10 @@ def load_pvog(db: sqlite3.Connection, snap: Path):
         db.execute(
             """INSERT INTO caveat (scope_level,scope_key,matter,severity,
                  text_de,source)
-               VALUES ('gemeinde',?,NULL,'warn',?,'pvog')""",
-            (ags, f"Für '{kind}' nennt der Zuständigkeitsfinder mehrere "
+               VALUES ('gemeinde',?,?,'warn',?,'pvog')""",
+            # narrowed to its kind: the ambiguity of one office type must
+            # not be attached to courts or to every other office type
+            (ags, kind, f"Für '{kind}' nennt der Zuständigkeitsfinder mehrere "
                   f"Stellen; die Praxis ist regional unterschiedlich — "
                   f"bitte vor Antragstellung telefonisch bestätigen."))
     # Bayern: AsylbLG competence is PHASE-dependent, which no per-place
@@ -422,7 +462,8 @@ def load_pvog(db: sqlite3.Connection, snap: Path):
             "SELECT ags FROM kreis WHERE land_code='09'").fetchall():
         db.execute(
             """INSERT INTO caveat (scope_level,scope_key,matter,severity,
-                 text_de,source) VALUES ('kreis',?,NULL,'info',?,'sntiq')""",
+                 text_de,source)
+               VALUES ('kreis',?,'asylblg_behoerde','info',?,'sntiq')""",
             (kreis_ags,
              "AsylbLG in Bayern: Während des Aufenthalts in einer "
              "staatlichen Aufnahmeeinrichtung (z. B. ANKER-Einrichtung) "
@@ -485,9 +526,15 @@ def load_ba(db: sqlite3.Connection, snap: Path):
                                               t["traeger_nr"]))
             merged += len(rows)
             if len(rows) == 1:
+                # the office inherits the Träger's Kreis area: inferred from
+                # (PVOG office in a sole-Träger Kreis) x (BA assignment)
                 for k in sole_kreise:
-                    db.execute("INSERT OR IGNORE INTO competence VALUES "
-                               "(?,'jobcenter','kreis',?,0)", (rows[0][0], k))
+                    insert_competence(
+                        db, rows[0][0], "jobcenter", "kreis", k, 0,
+                        source="ba", observed_on=snap.name,
+                        source_ref=f"traeger:{t['traeger_nr']}",
+                        source_url=BA_REGISTER_URL,
+                        derivation="ba_traeger_area_inherited_by_office")
         # standalone BA record when the Träger has no enrichable office OR
         # serves split Kreise (there it is the only reliable answer)
         standalone_kreise = ([z["kreis_ags"] for z in kreise]
@@ -500,15 +547,17 @@ def load_ba(db: sqlite3.Connection, snap: Path):
                      source,source_url,fetched_at)
                    VALUES ('jobcenter',?,?,?,'ba',?,?)""",
                 (t["name"], normalize_name(t["name"]), t["legal_form"],
-                 "https://statistik.arbeitsagentur.de/ Gebietsstruktur "
-                 "Grundsicherungstraeger", now()))
+                 BA_REGISTER_URL, snap.name))
             aid = cur.lastrowid
             created += 1
             db.execute("INSERT OR IGNORE INTO authority_external_id "
                        "VALUES (?,?,?)", (aid, "ba_traeger", t["traeger_nr"]))
             for k in standalone_kreise:
-                db.execute("INSERT OR IGNORE INTO competence VALUES "
-                           "(?,'jobcenter','kreis',?,0)", (aid, k))
+                insert_competence(
+                    db, aid, "jobcenter", "kreis", k, 0,
+                    source="ba", observed_on=snap.name,
+                    source_ref=f"traeger:{t['traeger_nr']}",
+                    source_url=BA_REGISTER_URL)
 
     # an office reached by SEVERAL Träger (it serves gemeinden across
     # their Kreise) may only keep a legal form all of them agree on
@@ -528,7 +577,8 @@ def load_ba(db: sqlite3.Connection, snap: Path):
                        (aid,))
             db.execute(
                 """INSERT INTO caveat (scope_level,scope_key,matter,severity,
-                     text_de,source) VALUES ('authority',?,NULL,'warn',?,'ba')""",
+                     text_de,source)
+                   VALUES ('authority',?,'jobcenter','warn',?,'ba')""",
                 (str(aid),
                  "Dieses Jobcenter liegt im Gebiet mehrerer SGB-II-Träger "
                  "mit unterschiedlicher Rechtsform — Trägerschaft bitte "
@@ -544,7 +594,7 @@ def load_ba(db: sqlite3.Connection, snap: Path):
         db.execute(
             """INSERT INTO caveat (scope_level,scope_key,matter,
                  severity,text_de,source)
-               VALUES ('kreis',?,NULL,'warn',?,'ba')""",
+               VALUES ('kreis',?,'jobcenter','warn',?,'ba')""",
             (z[0], f"Der Kreis {z[1]} ist auf mehrere Jobcenterbezirke "
                    f"aufgeteilt — Zuständigkeit bitte beim Jobcenter "
                    f"bestätigen."))
@@ -643,7 +693,7 @@ def load_bayernportal(db: sqlite3.Connection, snap: Path):
                 (root_name.replace(", Kreisfreie Stadt", ""),
                  normalize_name(root_name.replace(", Kreisfreie Stadt", "")),
                  f"https://www.bayernportal.de/dokumente/behoerde/"
-                 f"{units[0]['root_id']}", now()))
+                 f"{units[0]['root_id']}", snap.name))
             root_aid = cur.lastrowid
             n_auth += 1
 
@@ -691,7 +741,7 @@ def load_bayernportal(db: sqlite3.Connection, snap: Path):
                  (f"https://www.bayernportal.de/dokumente/behoerde/"
                   f"{u['oe_id']}" if u.get("oe_id") else
                   f"https://www.bayernportal.de/dokumente/behoerde/"
-                  f"{u['root_id']}/organigramm"), now()))
+                  f"{u['root_id']}/organigramm"), snap.name))
             aid = cur.lastrowid
             n_auth += 1
             addr = u.get("address")
@@ -708,8 +758,18 @@ def load_bayernportal(db: sqlite3.Connection, snap: Path):
             aid_by_key[u["key"]] = aid
             if kreis:
                 for k in ukinds:
-                    db.execute("INSERT OR IGNORE INTO competence VALUES "
-                               "(?,?,'kreis',?,0)", (aid, k, kreis))
+                    # the kind is classified from the department NAME and the
+                    # area from the organigram root: inferred, not observed
+                    insert_competence(
+                        db, aid, k, "kreis", kreis, 0,
+                        source="bayernportal", observed_on=snap.name,
+                        source_ref=f"unit:{u['key']}",
+                        source_url=(
+                            f"https://www.bayernportal.de/dokumente/behoerde/"
+                            f"{u['oe_id']}" if u.get("oe_id") else
+                            f"https://www.bayernportal.de/dokumente/behoerde/"
+                            f"{u['root_id']}/organigramm"),
+                        derivation="bayernportal_department_name_classification")
                     kind_hits.setdefault(k, []).append(aid)
                     n_comp += 1
 
@@ -756,7 +816,9 @@ def load_bayernportal(db: sqlite3.Connection, snap: Path):
             GROUP BY p.id""").fetchall():
         # transfer competences and edges, prefer pvog contact data where
         # the portal card was empty
-        db.execute("""UPDATE OR IGNORE competence SET authority_id=?
+        db.execute("""UPDATE OR IGNORE competence SET authority_id=?,
+                        derivation=COALESCE(derivation || ';', '')
+                                   || 'office_identity_merged_by_name'
                       WHERE authority_id=?""", (bp_id, pvog_id))
         db.execute("DELETE FROM competence WHERE authority_id=?", (pvog_id,))
         for col in ("street", "plz", "city", "phone", "fax", "email",
@@ -940,6 +1002,196 @@ def load_eu_overlay(db: sqlite3.Connection,
     return verified_at
 
 
+# ------------------------------------------------------------------ courts
+
+# Names in GDS.Gerichte that contain "gericht" but are not deciding courts.
+_NOT_A_COURT = re.compile(
+    r"staatsanwaltschaft|generalbundesanwalt|justizvollzug|"
+    r"gerichtsvollzieher|justizbeitreibung|gerichtskasse|bundesamt|"
+    r"führungsaufsicht|ministerium|anstalt|kompetenzzentrum", re.I)
+_COURT_WORD = re.compile(r"gericht|gerichtshof|finanzhof", re.I)
+_EXTRA_COURT_KIND = [
+    ("bundespatentgericht", "bundesgericht"),
+    ("staatsgerichtshof", "verfassungsgericht"),
+    ("anwaltsgericht", "berufsgericht"), ("berufsgericht", "berufsgericht"),
+    ("dienstgericht", "dienstgericht"),
+]
+
+
+def registry_court_kind(name: str) -> str:
+    low = name.lower()
+    for marker, kind in _EXTRA_COURT_KIND:
+        if marker in low:
+            return kind
+    kind = court_kind(name)
+    return "sonstiges_gericht" if kind == "justizbehoerde" else kind
+
+
+def court_id_de(xjustiz: str) -> str:
+    return f"court:de:{xjustiz}"
+
+
+def load_courts(db: sqlite3.Connection, snap: Path | None,
+                identity_path: Path = COURT_IDENTITY) -> int:
+    """Courts as first-class nodes, keyed by the official XJustiz code.
+
+    Source of the node set: the complete GDS.Gerichte codelist (xRepository
+    snapshot). Register cards (justizadressen) and the EU overlay are linked
+    to the nodes; nothing is matched by name. Returns the number of courts.
+    """
+    ident = yaml.safe_load(identity_path.read_text(encoding="utf-8"))
+    prefix_land = {str(k): str(v) for k, v in
+                   (ident.get("xjustiz_land_prefix") or {}).items()}
+    federal = {str(f["xjustiz"]): f for f in ident.get("federal_courts") or []}
+    federal_url = ident.get("federal_ecli_source_url")
+    observed = snap.name if snap else None
+
+    codelist: dict[str, str] = {}
+    if snap and (snap / "gerichte.jsonl").exists():
+        for row in read_jsonl(snap / "gerichte.jsonl"):
+            if row.get("code") and row.get("wert"):
+                codelist[row["code"]] = row["wert"]
+
+    def insert(code: str, raw_name: str, source: str, observed_on: str):
+        dissolved = raw_name.lower().startswith("aufgelöst")
+        name = re.sub(r"^aufgelöst-\s*", "", raw_name, flags=re.I).strip()
+        base = code[:5]
+        unit_type = "court" if re.fullmatch(r"[A-Z]\d{4}", code) else "department"
+        fed = federal.get(code)
+        level = ("federal" if fed or code[:1] in ("A", "Z")
+                 or name.lower().startswith("bundes") else "land")
+        db.execute(
+            """INSERT OR IGNORE INTO court (court_id, jurisdiction, xjustiz_id,
+                 official_name, name_norm, kind, level, land_code, status,
+                 unit_type, parent_court_id, ecli_court_code, ecli_basis,
+                 ecli_source_url, source, observed_on)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (court_id_de(code), "DE", code, name, normalize_name(name),
+             (fed or {}).get("kind") or registry_court_kind(name), level,
+             None if level == "federal" else prefix_land.get(code[:1]),
+             "dissolved" if dissolved else "active", unit_type,
+             None, (fed or {}).get("ecli"),
+             (fed or {}).get("ecli_basis") if (fed or {}).get("ecli") else None,
+             federal_url if (fed or {}).get("ecli") else None,
+             source, observed_on))
+        if fed and fed.get("short"):
+            for alias_type in ("short", "rii_gertyp"):
+                db.execute(
+                    "INSERT OR IGNORE INTO court_alias VALUES (?,?,?,?,?)",
+                    (court_id_de(code), fed["short"],
+                     normalize_name(fed["short"]), alias_type,
+                     "court_identity.yaml"))
+        return base, unit_type
+
+    for code, raw in sorted(codelist.items()):
+        name = re.sub(r"^aufgelöst-\s*", "", raw, flags=re.I)
+        if _NOT_A_COURT.search(name) or not _COURT_WORD.search(name):
+            continue
+        insert(code, raw, "xrepository:gds.gerichte", observed)
+
+    # register cards whose XJustiz code the codelist does not (or no longer)
+    # carry still become nodes, flagged by their source
+    for code, name, fetched in db.execute(
+            """SELECT e.value, MIN(a.name), MIN(a.fetched_at)
+               FROM authority_external_id e JOIN authority a
+                 ON a.id = e.authority_id
+               WHERE e.scheme = 'xjustiz' AND a.kind NOT IN
+                     ('staatsanwaltschaft','generalstaatsanwaltschaft')
+               GROUP BY e.value""").fetchall():
+        if not db.execute("SELECT 1 FROM court WHERE xjustiz_id=?",
+                          (code,)).fetchone():
+            insert(code, name, "justizadressen", fetched or now())
+
+    # departments hang on their parent court when the base code exists
+    db.execute("""UPDATE court SET parent_court_id = (
+                    SELECT p.court_id FROM court p
+                    WHERE p.xjustiz_id = substr(court.xjustiz_id, 1, 5)
+                      AND p.unit_type = 'court')
+                  WHERE unit_type = 'department' AND jurisdiction = 'DE'""")
+
+    # Amtsgraph authority rows <-> court node (by XJustiz code, never name)
+    for aid, code, name in db.execute(
+            """SELECT a.id, e.value, a.name FROM authority_external_id e
+               JOIN authority a ON a.id = e.authority_id
+               WHERE e.scheme = 'xjustiz'""").fetchall():
+        row = db.execute("SELECT court_id, name_norm FROM court "
+                         "WHERE xjustiz_id=?", (code,)).fetchone()
+        if not row:
+            continue
+        role = ("main" if normalize_name(name) == row[1]
+                or not re.search(r"\s-\s|,\s|\s-[^\s]", name) else "department")
+        db.execute("INSERT OR IGNORE INTO court_authority VALUES (?,?,?,?)",
+                   (row[0], aid, role, "xjustiz_id"))
+        db.execute(
+            "INSERT OR IGNORE INTO court_alias VALUES (?,?,?,?,?)",
+            (row[0], name, normalize_name(name), "register_name",
+             "justizadressen"))
+
+    for eu in ident.get("eu_courts") or []:
+        hit = db.execute(
+            """SELECT a.id, a.name, a.fetched_at FROM authority_external_id e
+               JOIN authority a ON a.id = e.authority_id
+               WHERE e.scheme='eu_official' AND e.value=?""",
+            (eu["eu_official"],)).fetchone()
+        if not hit:
+            continue
+        cid = f"court:eu:{eu['ecli']}"
+        db.execute(
+            """INSERT OR IGNORE INTO court (court_id, jurisdiction, xjustiz_id,
+                 official_name, name_norm, kind, level, land_code, status,
+                 unit_type, parent_court_id, ecli_court_code, ecli_basis,
+                 ecli_source_url, source, observed_on)
+               VALUES (?,'EU',NULL,?,?,'eu_court','eu',NULL,'active','court',
+                       NULL,?,'curated_eu_ecli_prefix',NULL,'eu_curated',?)""",
+            (cid, hit[1], normalize_name(hit[1]), eu["ecli"], hit[2]))
+        db.execute("INSERT OR IGNORE INTO court_authority VALUES (?,?,?,?)",
+                   (cid, hit[0], "main", "eu_official_id"))
+        if eu.get("short"):
+            db.execute("INSERT OR IGNORE INTO court_alias VALUES (?,?,?,?,?)",
+                       (cid, eu["short"], normalize_name(eu["short"]),
+                        "short", "court_identity.yaml"))
+
+    n = db.execute("SELECT COUNT(*) FROM court").fetchone()[0]
+    linked = db.execute(
+        "SELECT COUNT(DISTINCT court_id) FROM court_authority").fetchone()[0]
+    print(f"courts: {n} court nodes ({len(codelist)} codelist rows), "
+          f"{linked} linked to register cards")
+    return n
+
+
+def load_assignment_evidence(db: sqlite3.Connection,
+                             path: Path = ASSIGNMENT_EVIDENCE) -> int:
+    """Curated non-register evidence (e.g. statutory assignments)."""
+    if not path.exists():
+        return 0
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    entries = raw.get("entries") or []
+    for e in entries:
+        territory = e.get("territory") or {}
+        url = str(e.get("source_url") or "")
+        if not url.startswith("https://"):
+            raise ValueError("assignment evidence needs an https source_url")
+        if not e.get("citation") or not e.get("observed_on"):
+            raise ValueError("assignment evidence needs citation and observed_on")
+        db.execute(
+            """INSERT INTO assignment_evidence (evidence_kind, subject, matter,
+                 territory_level, territory_key, court_id, norm_id, citation,
+                 passage, source_url, observed_on, valid_from,
+                 valid_until_exclusive, derived_by, legal_effect_verified, note)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (e["evidence_kind"], e["subject"], e["matter"],
+             territory["level"], str(territory["key"]), e.get("court_id"),
+             e.get("norm_id"), e["citation"], e.get("passage"), url,
+             str(e["observed_on"]),
+             str(e["valid_from"]) if e.get("valid_from") else None,
+             (str(e["valid_until_exclusive"])
+              if e.get("valid_until_exclusive") else None),
+             e.get("derived_by") or "user",
+             1 if e.get("legal_effect_verified") else 0, e.get("note")))
+    print(f"assignment evidence: {len(entries)} curated entries")
+    return len(entries)
+
+
 def apply_overrides(db: sqlite3.Connection):
     """Manual corrections — the ONLY place for hand fixes. Actions:
 
@@ -963,12 +1215,18 @@ def apply_overrides(db: sqlite3.Connection):
                 (a["kind"], a["name"], normalize_name(a["name"]),
                  a.get("street"), a.get("plz"), a.get("city"),
                  a.get("phone"), a.get("fax"), a.get("email"), a.get("web"),
-                 a.get("hours"), o.get("source"), now()))
+                 a.get("hours"), o.get("source"),
+                 str(o.get("date") or now())))
             aid = cur.lastrowid
             for c in o.get("competences", []):
-                db.execute("INSERT OR IGNORE INTO competence VALUES (?,?,?,?,?)",
-                           (aid, c["kind"], c["level"], str(c["area"]),
-                            c.get("rank", 0)))
+                insert_competence(
+                    db, aid, c["kind"], c["level"], str(c["area"]),
+                    c.get("rank", 0), source="override",
+                    observed_on=str(o.get("date") or now()),
+                    source_ref=f"override:{f.name}",
+                    source_url=o.get("source"),
+                    review_due=(str(o["expires"]) if o.get("expires")
+                                else None))
             print(f"  override {f.name}: added authority {aid} "
                   f"({len(o.get('competences', []))} competences)")
             continue
@@ -1087,6 +1345,13 @@ def main() -> int:
     apply_overrides(db)
     drop_self_loops(db)
     classify_landratsamt_roots(db)
+    xrepo = latest_snapshot("xrepository")
+    load_courts(db, xrepo)
+    if xrepo:
+        snaps["xrepository"] = xrepo.name
+    load_assignment_evidence(db)
+    db.execute("INSERT OR REPLACE INTO build_info VALUES ('schema_version', ?)",
+               (SCHEMA_VERSION,))
     db.execute("INSERT OR REPLACE INTO build_info VALUES ('built_at', ?)", (now(),))
     db.execute("INSERT OR REPLACE INTO build_info VALUES ('snapshots', ?)",
                (json.dumps(snaps),))

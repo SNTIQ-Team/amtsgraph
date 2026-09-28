@@ -154,6 +154,15 @@ CREATE TABLE competence (
                                              --     Oberbayern for AsylbLG
                                              --     accommodation) — shown as
                                              --     supervisory, never as THE answer
+    -- Relation-level provenance (the assignment, not only the entity):
+    source      TEXT,                        -- 'pvog'|'ba'|'bayernportal'|'override'
+    observed_on TEXT,                        -- snapshot day / override review day
+    source_ref  TEXT,                        -- register record locator
+    source_url  TEXT,
+    derivation  TEXT,                        -- NULL = as observed; else the
+                                             -- heuristic/inference that
+                                             -- produced or re-ranked the row
+    review_due  TEXT,                        -- curated rows: re-check by
     PRIMARY KEY (authority_id, kind, level, area)
 );
 CREATE INDEX idx_comp_area ON competence(kind, level, area);
@@ -250,14 +259,92 @@ FROM court_chain;
 CREATE TABLE caveat (
     id          INTEGER PRIMARY KEY,
     scope_level TEXT NOT NULL CHECK (scope_level IN
-                  ('plz','jz_place','gemeinde','kreis','authority','matter','global')),
-    scope_key   TEXT NOT NULL,               -- e.g. '25712' / '25712|BURG' / AGS / authority id
-    matter      TEXT,                        -- optional narrowing
+                  ('plz','jz_place','gemeinde','kreis','land','authority',
+                   'court','matter','assignment','global')),
+    scope_key   TEXT NOT NULL,               -- e.g. '25712' / '25712|BURG' / AGS /
+                                             -- authority id / court id / assignment id
+    matter      TEXT,                        -- optional narrowing: court matter
+                                             -- code OR authority kind
     severity    TEXT NOT NULL CHECK (severity IN ('info','warn','block')),
     text_de     TEXT NOT NULL,
-    source      TEXT NOT NULL
+    source      TEXT NOT NULL,
+    valid_from  TEXT,                        -- NULL = since always
+    valid_until_exclusive TEXT               -- NULL = open-ended
 );
 CREATE INDEX idx_caveat_scope ON caveat(scope_level, scope_key);
+
+-- ============================================================== COURTS
+
+-- Courts as first-class, build-stable nodes. authority.id is a build-local
+-- row number; court_id is derived from the official XJustiz code
+-- (GDS.Gerichte codelist) so decision corpora can reference it:
+--   court:de:<XJustiz-ID>        e.g. court:de:A1000 (Bundesgerichtshof)
+--   court:eu:<ECLI court code>   e.g. court:eu:C (Court of Justice)
+CREATE TABLE court (
+    court_id        TEXT PRIMARY KEY,
+    jurisdiction    TEXT NOT NULL CHECK (jurisdiction IN ('DE','EU')),
+    xjustiz_id      TEXT UNIQUE,
+    official_name   TEXT NOT NULL,           -- codelist name (without 'aufgelöst-')
+    name_norm       TEXT NOT NULL,
+    kind            TEXT NOT NULL,
+    level           TEXT NOT NULL CHECK (level IN ('federal','land','eu')),
+    land_code       TEXT,                    -- from the XJustiz prefix (Land courts)
+    status          TEXT NOT NULL CHECK (status IN ('active','dissolved')),
+    unit_type       TEXT NOT NULL CHECK (unit_type IN ('court','department')),
+    parent_court_id TEXT REFERENCES court(court_id),
+    ecli_court_code TEXT,                    -- NULL = not known to this build
+    ecli_basis      TEXT,                    -- how the ECLI code is known
+    ecli_source_url TEXT,
+    source          TEXT NOT NULL,           -- 'xrepository:gds.gerichte' | ...
+    observed_on     TEXT NOT NULL
+);
+CREATE INDEX idx_court_norm ON court(name_norm);
+CREATE INDEX idx_court_ecli ON court(ecli_court_code);
+
+CREATE TABLE court_alias (
+    court_id    TEXT NOT NULL REFERENCES court(court_id),
+    alias       TEXT NOT NULL,
+    alias_norm  TEXT NOT NULL,
+    alias_type  TEXT NOT NULL,               -- 'register_name'|'short'|'rii_gertyp'
+    source      TEXT NOT NULL,
+    PRIMARY KEY (court_id, alias_norm, alias_type)
+);
+CREATE INDEX idx_court_alias_norm ON court_alias(alias_norm);
+
+-- court node <-> Amtsgraph authority rows (contact cards, court chains)
+CREATE TABLE court_authority (
+    court_id     TEXT NOT NULL REFERENCES court(court_id),
+    authority_id INTEGER NOT NULL REFERENCES authority(id),
+    role         TEXT NOT NULL CHECK (role IN ('main','department')),
+    basis        TEXT NOT NULL,              -- 'xjustiz_id' | 'eu_official_id'
+    PRIMARY KEY (court_id, authority_id)
+);
+CREATE INDEX idx_court_authority_aid ON court_authority(authority_id);
+
+-- Curated evidence for an assignment that is NOT a register observation,
+-- e.g. a statutory concentration of a matter at one court. Distinct kind:
+-- it never replaces or silently upgrades a register observation.
+CREATE TABLE assignment_evidence (
+    id              INTEGER PRIMARY KEY,
+    evidence_kind   TEXT NOT NULL CHECK (evidence_kind IN
+                      ('statutory_assignment','official_publication')),
+    subject         TEXT NOT NULL CHECK (subject IN ('court_matter','authority_kind')),
+    matter          TEXT NOT NULL,           -- court matter code or authority kind
+    territory_level TEXT NOT NULL CHECK (territory_level IN
+                      ('land','kreis','gemeinde','plz','jz_place')),
+    territory_key   TEXT NOT NULL,
+    court_id        TEXT,                    -- optional: the assigned court
+    norm_id         TEXT,                    -- e.g. de/by/dvasyl/para/1
+    citation        TEXT NOT NULL,
+    passage         TEXT,                    -- exact supporting text, if retained
+    source_url      TEXT NOT NULL,
+    observed_on     TEXT NOT NULL,
+    valid_from      TEXT,
+    valid_until_exclusive TEXT,
+    derived_by      TEXT NOT NULL CHECK (derived_by IN ('user','parser','model')),
+    legal_effect_verified INTEGER NOT NULL DEFAULT 0,
+    note            TEXT
+);
 
 -- ============================================================== search
 
