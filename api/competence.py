@@ -729,7 +729,7 @@ def court_chain(conn: sqlite3.Connection, *, matter: str,
     rows = conn.execute(
         """SELECT position, role, note, authority_id FROM court_chain
            WHERE plz = ? AND ortk = ? AND matter = ?
-           ORDER BY role DESC, position""",
+           ORDER BY CASE role WHEN 'court' THEN 0 ELSE 1 END, role, position""",
         (place["plz"], place["ortk"], matter)).fetchall()
     court_ids = court_ids_for(conn, [r["authority_id"] for r in rows])
     ags = place["gemeinde_ags"] if "gemeinde_ags" in place.keys() else None

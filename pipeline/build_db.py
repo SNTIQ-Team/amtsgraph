@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 import yaml
 
 import validate
-from common import ROOT, latest_snapshot, normalize_name, read_jsonl
+from common import ROOT, conflicts_with_jobcenter, latest_snapshot, normalize_name, read_jsonl
 
 DB_PATH = ROOT / "data" / "atlas.db"
 SCHEMA = ROOT / "db" / "schema.sql"
@@ -287,8 +287,24 @@ def _read_glob(snap: Path, pattern: str):
         yield from read_jsonl(f)
 
 
+def pvog_street(address: dict) -> str | None:
+    street = (address.get("street") or "").strip()
+    number = str(address.get("houseNumber") or "").strip()
+    if not street or not number or not (number[0].isdigit() or re.fullmatch(r"[A-Za-z]", number)):
+        return street or None
+    # Releases also contain complete street lines. Compare a complete trailing
+    # number, accepting spacing variants such as "3 a" and "79 / 81".
+    compact = lambda s: re.sub(r"\s+", "", s).casefold().replace("–", "-")
+    end = compact(number)
+    line = compact(street)
+    if line.endswith(end) and (len(line) == len(end) or not line[-len(end)-1].isdigit()):
+        return street
+    return f"{street} {number}"
+
+
 def load_pvog(db: sqlite3.Connection, snap: Path):
     auth_by_oe: dict[str, int] = {}
+    excluded_jobcenters = set()
     for u in _read_glob(snap, "units*.jsonl"):
         d = u["detail"]
         oe = u["oe_id"]
@@ -300,7 +316,7 @@ def load_pvog(db: sqlite3.Connection, snap: Path):
                     (loc.get("addresses") or [{}])[0])
         post = next((a for a in loc.get("addresses", [])
                      if a.get("type") == "Postanschrift"), None)
-        postal = (", ".join(x for x in (post.get("street"), post.get("zip"),
+        postal = (", ".join(x for x in (pvog_street(post), post.get("zip"),
                                         post.get("city")) if x)
                   if post else None)
         comms = {c.get("name"): c.get("value")
@@ -310,13 +326,15 @@ def load_pvog(db: sqlite3.Connection, snap: Path):
         web = next((w.get("uri") for w in d.get("internetAddresses", [])), None)
         geo = addr.get("geo") or {}
         name = d.get("title") or d.get("name") or "?"
+        if conflicts_with_jobcenter(name):
+            excluded_jobcenters.add(oe)
         cur = db.execute(
             """INSERT INTO authority (kind,name,name_norm,street,plz,city,
                  postal_address,phone,fax,email,web,hours,lat,lon,
                  source,source_url,fetched_at,source_updated_at)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             ("sonstige", name, normalize_name(name),
-             addr.get("street"), addr.get("zip"), addr.get("city"), postal,
+             pvog_street(addr), addr.get("zip"), addr.get("city"), postal,
              comms.get("Telefon"), comms.get("Fax"), comms.get("E-Mail"), web,
              hours, geo.get("latitude"), geo.get("longitude"),
              "pvog", f"pvog:organisationunit:{oe}", snap.name,
@@ -361,6 +379,9 @@ def load_pvog(db: sqlite3.Connection, snap: Path):
     by_ak: dict[tuple[str, str], list[dict]] = {}
     plain_rows: list[dict] = []
     for c in _read_glob(snap, "competences*.jsonl"):
+        if c["kind"] == "jobcenter" and (c["oe_id"] in excluded_jobcenters
+                                         or conflicts_with_jobcenter(c.get("oe_title") or "")):
+            continue
         if c["kind"] == "asylblg_behoerde":
             by_ak.setdefault((c["ags"], c["kind"]), []).append(c)
         else:

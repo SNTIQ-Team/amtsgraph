@@ -26,7 +26,6 @@ import json
 import os
 import sqlite3
 import threading
-import unicodedata
 from functools import wraps
 from pathlib import Path
 
@@ -52,15 +51,6 @@ def db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
-
-
-def normalize(name: str) -> str:
-    s = name.lower().strip()
-    for a, b in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
-        s = s.replace(a, b)
-    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
-    return s.split(",")[0].split("(")[0].strip()
-
 
 
 # Backwards-compatible alias: the card now lives with the domain operations.
@@ -208,17 +198,18 @@ def search_places(q: str, limit: int = 10):
                 LIMIT ?""",
             (q, limit)).fetchall()
         return {"query": q,
-                "matches": [{**dict(r),
+                "matches": [{**dict(r), "explicit_postcode": True,
                              "place_id": domain.ags_place_id(r["ags"])}
                             for r in rows],
                 "court_register_only": []}
 
-    norm = normalize(q)
+    norm = domain.normalize(q)
     rows = conn.execute(
         f"""SELECT {_PLACE_COLS} {_PLACE_FROM}
             WHERE g.name_norm LIKE ? || '%'
-            ORDER BY g.population IS NULL, g.population DESC LIMIT ?""",
-        (norm, limit)).fetchall()
+            ORDER BY (g.name_norm = ?) DESC, g.population IS NULL,
+                     g.population DESC, g.name_norm, g.ags LIMIT ?""",
+        (norm, norm, limit)).fetchall()
 
     # ---- substring fallback (e.g. 'neustadt' inside 'bad neustadt')
     if not rows and len(norm) >= 3:

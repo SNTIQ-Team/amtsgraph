@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import unicodedata
 from datetime import date
@@ -11,6 +12,13 @@ import requests
 
 ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOTS = ROOT / "data" / "snapshots"
+
+
+def conflicts_with_jobcenter(title: str) -> bool:
+    """Reject an explicit SGB XII-only unit, while allowing a combined II/XII office."""
+    return (bool(re.search(r"\bSGB[\s-]*(?:XII|12)\b", title, re.I))
+            and not re.search(r"\bJob[\s-]*center\b|\bSGB[\s-]*(?:II|2)\b|"
+                              r"\b(?:XII|12)\s*(?:/|und|&)\s*(?:II|2)\b", title, re.I))
 
 
 def snapshot_dir(source: str, day: str | None = None) -> Path:

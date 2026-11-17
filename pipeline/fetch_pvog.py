@@ -27,7 +27,7 @@ import sys
 
 import yaml
 
-from common import Http, HttpPool, latest_snapshot, read_jsonl, snapshot_dir, ROOT
+from common import Http, HttpPool, conflicts_with_jobcenter, latest_snapshot, read_jsonl, snapshot_dir, ROOT
 
 BASE = "https://pvog.fitko.net/suchdienst/api"
 
@@ -56,7 +56,7 @@ GLOBAL_DENY = re.compile(r"hotline|servicecenter|service-center", re.I)
 
 
 def find_units(http: Http, ars: str, probe: dict,
-               collect_all: bool) -> list[tuple[dict, str]]:
+               collect_all: bool, *, kind: str = "") -> list[tuple[dict, str]]:
     """Search probe service at ars, return [(unit_title_row, lb_id), ...].
 
     Service titles are often empty in the v7 listing, so must_match runs
@@ -86,6 +86,8 @@ def find_units(http: Http, ars: str, probe: dict,
             role = (u.get("role") or {}).get("code")
             unit_title = u.get("title") or ""
             if role not in ("01", "02", "03"):
+                continue
+            if kind == "jobcenter" and conflicts_with_jobcenter(unit_title):
                 continue
             if GLOBAL_DENY.search(unit_title) or (deny and deny.search(unit_title)):
                 continue
@@ -191,7 +193,7 @@ def main() -> int:
             probes = spec["probes"] if isinstance(spec, dict) else spec
             found: list[tuple[dict, str]] = []
             for probe in probes:
-                hits = find_units(http, ars, probe, collect_all=multi)
+                hits = find_units(http, ars, probe, collect_all=multi, kind=kind)
                 for h in hits:
                     if h[0]["id"] not in {f[0]["id"] for f in found}:
                         found.append(h)
