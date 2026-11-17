@@ -32,7 +32,6 @@ import sqlite3
 from typing import Any, Iterable
 
 from fastapi import FastAPI, Request
-from fastapi.dependencies.utils import get_flat_dependant
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -184,19 +183,20 @@ def request_scope(request: Request) -> dict:
 
 # ------------------------------------------------------- strict schemas
 
-_DECLARED: dict[int, frozenset] = {}
-
-
 def _declared_query_names(route) -> frozenset | None:
     dependant = getattr(route, "dependant", None)
     if dependant is None:
         return None
-    key = id(route)
-    names = _DECLARED.get(key)
+    names = getattr(route, "_amtsgraph_query_names", None)
     if names is None:
-        flat = get_flat_dependant(dependant)
-        names = frozenset(p.alias for p in flat.query_params)
-        _DECLARED[key] = names
+        aliases = set()
+        pending = [dependant]
+        while pending:
+            current = pending.pop()
+            aliases.update(param.alias for param in current.query_params)
+            pending.extend(current.dependencies)
+        names = frozenset(aliases)
+        route._amtsgraph_query_names = names
     return names
 
 

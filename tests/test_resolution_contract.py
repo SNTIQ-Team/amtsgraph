@@ -19,6 +19,26 @@ PLACE_B = "place:jz:12345:EXAMPLE-B"
 MUNI = "place:ags:99001001"
 
 
+def test_query_contract_includes_nested_aliases_and_excludes_headers():
+    from fastapi import Depends, FastAPI, Header, Query
+    from api.contract import _declared_query_names
+
+    def window(limit: int = Query(10, alias="max-results")):
+        return limit
+
+    def scope(page_size: int = Depends(window), snapshot: str = Header("")):
+        return page_size, snapshot
+
+    app = FastAPI()
+
+    @app.get("/places/{place_id}")
+    def places(place_id: str, q: str, selection=Depends(scope)):
+        return q
+
+    route = next(route for route in app.routes if route.path == "/places/{place_id}")
+    assert _declared_query_names(route) == {"q", "max-results"}
+
+
 def texts(items):
     return {c["text_de"] for c in items}
 
