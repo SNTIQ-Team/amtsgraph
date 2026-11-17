@@ -5,3 +5,7 @@ PyYAML
 # api (optional until serving)
 fastapi
 uvicorn
+# Briefcraft letter export (DOCX template, PDF fallback and print marks)
+python-docx>=1.1
+fpdf2>=2.8
+pypdf>=5
